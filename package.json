@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker": "tsx src/worker/daemon.ts",
+    "ebay:search": "tsx src/services/ebay/test-search.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
