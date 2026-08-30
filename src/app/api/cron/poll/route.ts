@@ -36,6 +36,11 @@ async function handlePoll(request: Request) {
 
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "same-origin") {
+    return true;
+  }
+
   if (!secret) {
     console.warn("[cron/poll] CRON_SECRET is not set; allowing request without authorization.");
     return true;

@@ -1,0 +1,96 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { DealCard } from "@/components/feed/DealCard";
+import { Card } from "@/components/ui/card";
+import { Input, Select } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import { api, ApiError } from "@/lib/api-client";
+import type { Monitor, SeenListing } from "@/lib/types";
+
+export function FeedView() {
+  const { push } = useToast();
+  const [listings, setListings] = useState<SeenListing[]>([]);
+  const [monitors, setMonitors] = useState<Monitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [monitorId, setMonitorId] = useState("");
+  const [format, setFormat] = useState("");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    api<{ monitors: Monitor[] }>("/api/monitors")
+      .then((data) => setMonitors(data.monitors))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (monitorId) params.set("monitorId", monitorId);
+    if (format) params.set("format", format);
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    setLoading(true);
+    api<{ listings: SeenListing[] }>(`/api/feed?${params.toString()}`)
+      .then((data) => setListings(data.listings))
+      .catch((error) => {
+        push({
+          tone: "error",
+          title: "Could not load deals",
+          description: error instanceof ApiError ? error.message : undefined,
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [monitorId, format, debouncedQuery, push]);
+
+  const empty = useMemo(() => !loading && listings.length === 0, [loading, listings.length]);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Deals Feed</h1>
+        <p className="mt-1 text-sm text-zinc-400">Matched listings saved from your monitors, newest first.</p>
+      </div>
+
+      <Card className="grid gap-3 p-4 md:grid-cols-3">
+        <Select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} aria-label="Filter by monitor">
+          <option value="">All monitors</option>
+          {monitors.map((monitor) => (
+            <option key={monitor.id} value={monitor.id}>
+              {monitor.name}
+            </option>
+          ))}
+        </Select>
+        <Select value={format} onChange={(event) => setFormat(event.target.value)} aria-label="Filter by format">
+          <option value="">All formats</option>
+          <option value="AUCTION">Auction</option>
+          <option value="FIXED_PRICE">Buy It Now</option>
+        </Select>
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search keywords in titles"
+          aria-label="Search deals"
+        />
+      </Card>
+
+      {loading ? <p className="text-sm text-zinc-500">Loading deals…</p> : null}
+      {empty ? (
+        <Card className="p-8 text-center text-sm text-zinc-400">
+          No deals yet. Run a scan after creating an active monitor.
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {listings.map((listing) => (
+            <DealCard key={listing.id} listing={listing} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

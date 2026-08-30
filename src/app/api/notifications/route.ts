@@ -25,6 +25,9 @@ export async function POST(request: Request) {
     }
 
     const { id, ...data } = parsed.data;
+    if (isMaskedSecret(data.authToken)) {
+      delete data.authToken;
+    }
     const setting = id
       ? await prisma.notificationSetting.update({ where: { id }, data })
       : await prisma.notificationSetting.create({ data });
@@ -47,6 +50,7 @@ function toPublicSetting(setting: NotificationSetting) {
   return {
     ...setting,
     authToken: maskSecret(setting.authToken),
+    hasAuthToken: Boolean(setting.authToken),
   };
 }
 
@@ -54,6 +58,10 @@ function maskSecret(value: string | null): string | null {
   if (!value) return null;
   if (value.length <= 4) return "••••";
   return `••••${value.slice(-4)}`;
+}
+
+function isMaskedSecret(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.startsWith("••••");
 }
 
 function isMissingRecord(error: unknown): boolean {
