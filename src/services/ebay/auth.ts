@@ -1,3 +1,5 @@
+import { getEbayRuntimeConfig } from "@/services/config";
+
 import type { EbayOAuthTokenResponse } from "./types";
 
 const PRODUCTION_API_BASE = "https://api.ebay.com";
@@ -8,38 +10,57 @@ const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 export type EbayEnvironment = "PRODUCTION" | "SANDBOX";
 
-export function getEbayEnvironment(): EbayEnvironment {
-  return process.env.EBAY_ENVIRONMENT === "SANDBOX" ? "SANDBOX" : "PRODUCTION";
+export interface EbayResolvedConfig {
+  appId: string;
+  certId: string;
+  environment: EbayEnvironment;
+  marketplaceId: string;
 }
 
-export function getEbayApiBaseUrl(): string {
-  return getEbayEnvironment() === "SANDBOX" ? SANDBOX_API_BASE : PRODUCTION_API_BASE;
+export function ebayApiBaseUrl(environment: EbayEnvironment): string {
+  return environment === "SANDBOX" ? SANDBOX_API_BASE : PRODUCTION_API_BASE;
 }
 
-export function requireEbayAppCredentials(): { appId: string; certId: string } {
-  const appId = process.env.EBAY_APP_ID?.trim() ?? "";
-  const certId = process.env.EBAY_CERT_ID?.trim() ?? "";
+export async function getEbayEnvironment(): Promise<EbayEnvironment> {
+  const config = await getEbayRuntimeConfig();
+  return config.environment;
+}
+
+export async function getEbayApiBaseUrl(): Promise<string> {
+  return ebayApiBaseUrl(await getEbayEnvironment());
+}
+
+export async function requireEbayAppCredentials(): Promise<EbayResolvedConfig> {
+  const config = await getEbayRuntimeConfig();
   const missing: string[] = [];
-
-  if (!appId) missing.push("EBAY_APP_ID");
-  if (!certId) missing.push("EBAY_CERT_ID");
+  if (!config.appId) missing.push("EBAY_APP_ID");
+  if (!config.certId) missing.push("EBAY_CERT_ID");
 
   if (missing.length > 0) {
     throw new Error(
       `Missing eBay API credentials: ${missing.join(" and ")}. ` +
-        `Set ${missing.join(" and ")} in your .env file before calling the eBay API.`,
+        `Add them in Settings → eBay Account, or set ${missing.join(" and ")} in .env.`,
     );
   }
 
-  return { appId, certId };
+  return config;
 }
 
 export class EbayAuthManager {
   private static accessToken: string | null = null;
   private static expiresAt = 0;
+  private static credentialKey: string | null = null;
   private static inflight: Promise<string> | null = null;
 
   static async getAccessToken(): Promise<string> {
+    const config = await requireEbayAppCredentials();
+    const key = credentialCacheKey(config);
+
+    if (this.credentialKey !== key) {
+      this.invalidate();
+      this.credentialKey = key;
+    }
+
     if (this.hasFreshCache()) {
       return this.accessToken as string;
     }
@@ -48,7 +69,7 @@ export class EbayAuthManager {
       return this.inflight;
     }
 
-    this.inflight = this.refreshAccessToken().finally(() => {
+    this.inflight = this.refreshAccessToken(config).finally(() => {
       this.inflight = null;
     });
 
@@ -58,6 +79,7 @@ export class EbayAuthManager {
   static invalidate(): void {
     this.accessToken = null;
     this.expiresAt = 0;
+    this.credentialKey = null;
   }
 
   private static hasFreshCache(): boolean {
@@ -65,10 +87,9 @@ export class EbayAuthManager {
     return this.expiresAt - Date.now() > REFRESH_SKEW_MS;
   }
 
-  private static async refreshAccessToken(): Promise<string> {
-    const { appId, certId } = requireEbayAppCredentials();
-    const credentials = Buffer.from(`${appId}:${certId}`).toString("base64");
-    const url = `${getEbayApiBaseUrl()}${OAUTH_TOKEN_PATH}`;
+  private static async refreshAccessToken(config: EbayResolvedConfig): Promise<string> {
+    const credentials = Buffer.from(`${config.appId}:${config.certId}`).toString("base64");
+    const url = `${ebayApiBaseUrl(config.environment)}${OAUTH_TOKEN_PATH}`;
 
     let response: Response;
     try {
@@ -93,7 +114,7 @@ export class EbayAuthManager {
     if (!response.ok) {
       throw new Error(
         `eBay OAuth token request failed (${response.status} ${response.statusText}) ` +
-          `for ${getEbayEnvironment()}: ${rawBody || "no response body"}`,
+          `for ${config.environment}: ${rawBody || "no response body"}`,
       );
     }
 
@@ -110,6 +131,11 @@ export class EbayAuthManager {
 
     this.accessToken = payload.access_token;
     this.expiresAt = Date.now() + payload.expires_in * 1000;
+    this.credentialKey = credentialCacheKey(config);
     return this.accessToken;
   }
+}
+
+function credentialCacheKey(config: EbayResolvedConfig): string {
+  return `${config.environment}:${config.appId}:${config.certId}`;
 }

@@ -1,20 +1,20 @@
 import { jsonOk } from "@/lib/api";
+import { getEbayRuntimeConfig } from "@/services/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const appId = Boolean(process.env.EBAY_APP_ID?.trim());
-  const certId = Boolean(process.env.EBAY_CERT_ID?.trim());
+  const ebay = await getEbayRuntimeConfig();
   const configuredMode = process.env.POLLER_MODE?.trim().toLowerCase();
 
   return jsonOk({
     ebay: {
-      configured: appId && certId,
-      appIdConfigured: appId,
-      certIdConfigured: certId,
-      environment: process.env.EBAY_ENVIRONMENT?.trim() || "PRODUCTION",
-      marketplaceId: process.env.EBAY_MARKETPLACE_ID?.trim() || "EBAY_DE",
+      configured: Boolean(ebay.appId && ebay.certId),
+      appIdConfigured: Boolean(ebay.appId),
+      certIdConfigured: Boolean(ebay.certId),
+      environment: ebay.environment,
+      marketplaceId: ebay.marketplaceId,
     },
     poller: {
       mode: configuredMode === "worker" || configuredMode === "serverless" ? configuredMode : "hybrid",

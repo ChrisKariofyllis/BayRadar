@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
+import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -194,8 +195,13 @@ export function SettingsView() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">Notification channels and system status.</p>
+        <p className="mt-1 text-sm text-zinc-400">eBay credentials, notification channels, and system status.</p>
       </div>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium text-zinc-100">eBay integration</h2>
+        <EbaySettingsCard />
+      </section>
 
       <section className="space-y-4">
         <h2 className="text-lg font-medium text-zinc-100">Notification channels</h2>
@@ -283,7 +289,9 @@ export function SettingsView() {
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="p-5">
             <h3 className="font-medium text-zinc-50">eBay API</h3>
-            <p className="mt-1 text-sm text-zinc-400">Credentials are read from environment variables, not this form.</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              Resolved from the Settings form first, then <code className="text-zinc-300">.env</code>.
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Badge tone={status?.ebay.configured ? "success" : "danger"}>
                 {status?.ebay.configured ? "Configured" : "Missing credentials"}

@@ -1,0 +1,16 @@
+services:
+  bayradar:
+    build: .
+    container_name: bayradar
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/prisma/data/bayradar.db
+      - APP_SECRET=${APP_SECRET:-default-change-me-in-production}
+    volumes:
+      - bayradar_data:/app/prisma/data
+
+volumes:
+  bayradar_data:

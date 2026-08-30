@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BayRadar
 
-## Getting Started
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![Prisma](https://img.shields.io/badge/Prisma-6-2D3748)](https://www.prisma.io)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED)](./Dockerfile)
+[![Version](https://img.shields.io/badge/version-v0.1.0--alpha-orange)](./package.json)
 
-First, run the development server:
+Self-hosted eBay deal radar for Germany and other marketplaces. Watch searches, filter junk listings, and get alerts — from a home server or Vercel.
+
+## Features
+
+- **Deal monitoring** — keyword + category + max price, auctions and Buy It Now
+- **Anti-scam filters** — negative keywords (`ovp`, `defekt`, `box only`, …) and auction time windows
+- **Multi-channel alerts** — Ntfy, Telegram, Discord, Gotify
+- **Web UI credentials manager** — paste eBay App ID / Cert ID in Settings (SQLite first, `.env` fallback)
+- **Hybrid deploy** — Docker worker + dashboard, or Vercel cron + Turso
+
+## Quickstart (self-hosted / Docker)
+
+### One-line install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+curl -sSL https://raw.githubusercontent.com/ChrisKariofyllis/BayRadar/main/install.sh | bash
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The installer checks Docker, clones into `~/bayradar`, generates `APP_SECRET`, and starts the stack.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Manual Docker Compose
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+git clone https://github.com/ChrisKariofyllis/BayRadar.git
+cd BayRadar
+cp .env.example .env   # set APP_SECRET
+docker compose up -d --build
+```
 
-## Learn More
+Open **http://localhost:3000** → **Settings** → enter your eBay keys → create a monitor → **Trigger Scan Now**.
 
-To learn more about Next.js, take a look at the following resources:
+Data lives in the `bayradar_data` volume (`/app/prisma/data`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Quickstart (Vercel serverless)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Create a [Turso](https://turso.tech) (libSQL) database and copy the URL + auth token.
+2. Import the GitHub repo into [Vercel](https://vercel.com).
+3. Set environment variables:
+   - `DATABASE_URL` — Turso URL (Prisma + libSQL adapter, or Turso HTTP URL if you switch providers)
+   - `CRON_SECRET` — random string (Vercel Cron sends it as `Authorization: Bearer …`)
+   - Optional fallbacks: `EBAY_APP_ID`, `EBAY_CERT_ID` (or configure them in the dashboard after deploy)
+4. Add a Vercel Cron job for `GET /api/cron/poll` every 5 minutes (`vercel.json` already includes this).
+5. Deploy. Open `/settings`, save eBay credentials, and create monitors.
 
-## Deploy on Vercel
+Serverless mode is **deal-finding only**. The sub-second auto-sniper runs on the self-hosted worker, not on Vercel.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+> Prisma in this repo ships with SQLite. For Turso, add a libSQL driver adapter and point `DATABASE_URL` at your Turso database before going to production.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## eBay API setup in 2 minutes
+
+1. Go to [developer.ebay.com](https://developer.ebay.com) and create a free developer account.
+2. Open **Application Keys** (Keyset) for **Production** (or Sandbox for tests).
+3. Copy **App ID (Client ID)** and **Cert ID (Client Secret)**.
+4. In BayRadar, open **Settings → eBay Account & API Configuration**.
+5. Paste the keys, pick **PRODUCTION** or **SANDBOX**, choose a marketplace (default `EBAY_DE`), then **Save Configuration**.
+6. Click **Test eBay Connection**. You should see a success badge.
+
+No RuName is required for Browse search (client-credentials grant).
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env
+npx prisma migrate dev
+npm run dev          # dashboard
+npm run worker       # optional poller daemon
+```
+
+## Roadmap
+
+- High-precision sub-second **Auto-Sniper** (fire bid at T-6s)
+- Telegram interactive inline bidding
+- Machine-learning valuation / “is this actually cheap?”
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

@@ -1,4 +1,6 @@
-import { EbayAuthManager, getEbayApiBaseUrl } from "./auth";
+import { getEbayRuntimeConfig } from "@/services/config";
+
+import { EbayAuthManager, ebayApiBaseUrl } from "./auth";
 import type { EbaySearchResponse, SearchParams } from "./types";
 
 const SEARCH_PATH = "/buy/browse/v1/item_summary/search";
@@ -66,11 +68,11 @@ export class EbayApiError extends Error {
 
 export class EbayClient {
   async searchItems(params: SearchParams): Promise<EbaySearchResponse> {
-    const url = this.buildSearchUrl(params);
+    const url = await this.buildSearchUrl(params);
     return this.requestJson<EbaySearchResponse>(url, params.query);
   }
 
-  buildSearchUrl(params: SearchParams): string {
+  async buildSearchUrl(params: SearchParams): Promise<string> {
     const query = new URLSearchParams();
     const q = params.query.trim();
     if (!q) {
@@ -84,7 +86,8 @@ export class EbayClient {
       query.set("category_ids", categoryId);
     }
 
-    const filter = buildSearchFilter(params);
+    const config = await getEbayRuntimeConfig();
+    const filter = buildSearchFilter(params, config.marketplaceId);
     if (filter) {
       query.set("filter", filter);
     }
@@ -98,7 +101,7 @@ export class EbayClient {
     const limit = clampLimit(params.limit ?? DEFAULT_LIMIT);
     query.set("limit", String(limit));
 
-    return `${getEbayApiBaseUrl()}${SEARCH_PATH}?${query.toString()}`;
+    return `${ebayApiBaseUrl(config.environment)}${SEARCH_PATH}?${query.toString()}`;
   }
 
   private async requestJson<T>(url: string, queryLabel: string): Promise<T> {
@@ -111,7 +114,7 @@ export class EbayClient {
       try {
         response = await fetch(url, {
           method: "GET",
-          headers: this.buildHeaders(token),
+          headers: await this.buildHeaders(token),
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -161,9 +164,9 @@ export class EbayClient {
     throw new EbayApiError(`eBay Browse search exhausted retries for "${queryLabel}".`);
   }
 
-  private buildHeaders(accessToken: string): HeadersInit {
-    const marketplaceId = process.env.EBAY_MARKETPLACE_ID?.trim() || DEFAULT_MARKETPLACE;
-    const country = marketplaceToCountry(marketplaceId);
+  private async buildHeaders(accessToken: string): Promise<HeadersInit> {
+    const { marketplaceId } = await getEbayRuntimeConfig();
+    const country = marketplaceToCountry(marketplaceId || DEFAULT_MARKETPLACE);
 
     return {
       Authorization: `Bearer ${accessToken}`,
@@ -176,9 +179,8 @@ export class EbayClient {
 
 export const ebayClient = new EbayClient();
 
-export function buildSearchFilter(params: SearchParams): string {
+export function buildSearchFilter(params: SearchParams, marketplaceId = DEFAULT_MARKETPLACE): string {
   const parts: string[] = [];
-  const marketplaceId = process.env.EBAY_MARKETPLACE_ID?.trim() || DEFAULT_MARKETPLACE;
   const hasPriceBound = params.minPrice != null || params.maxPrice != null;
 
   if (hasPriceBound) {

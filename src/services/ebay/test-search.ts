@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+import { getEbayRuntimeConfig } from "@/services/config";
+
 import { EbayAuthManager } from "./auth";
 import { ebayClient } from "./client";
 import type { EbayItemSummary } from "./types";
@@ -8,10 +10,11 @@ const TEST_QUERY = "Game Boy";
 const TEST_MAX_PRICE = 50;
 const TEST_LIMIT = 5;
 
-function missingCredentialNames(): string[] {
+async function missingCredentialNames(): Promise<string[]> {
+  const config = await getEbayRuntimeConfig();
   const missing: string[] = [];
-  if (!process.env.EBAY_APP_ID?.trim()) missing.push("EBAY_APP_ID");
-  if (!process.env.EBAY_CERT_ID?.trim()) missing.push("EBAY_CERT_ID");
+  if (!config.appId) missing.push("EBAY_APP_ID");
+  if (!config.certId) missing.push("EBAY_CERT_ID");
   return missing;
 }
 
@@ -26,11 +29,11 @@ function formatBuyingFormat(item: EbayItemSummary): string {
 }
 
 async function main(): Promise<void> {
-  const missing = missingCredentialNames();
+  const missing = await missingCredentialNames();
   if (missing.length > 0) {
     console.warn("eBay credentials are not configured. Skipping live Browse API search.");
-    console.warn(`Add the following to your .env file:\n  ${missing.join("\n  ")}`);
-    console.warn("Optional: EBAY_ENVIRONMENT=PRODUCTION|SANDBOX, EBAY_MARKETPLACE_ID=EBAY_DE");
+    console.warn("Add them in Settings → eBay Account, or set these in .env:");
+    console.warn(`  ${missing.join("\n  ")}`);
     process.exitCode = 1;
     return;
   }

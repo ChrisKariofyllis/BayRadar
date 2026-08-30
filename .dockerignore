@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env
+.env.*
+prisma/dev.db
+prisma/dev.db-journal
+prisma/data
+src/generated
+coverage
+.vscode
+.cursor
+AGENTS.md
+CLAUDE.md
