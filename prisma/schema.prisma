@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum BuyingType {
+  ALL
+  AUCTION
+  FIXED_PRICE
+}
+
+enum NotificationProvider {
+  NTFY
+  GOTIFY
+  DISCORD
+  TELEGRAM
+  EMAIL
+}
+
+enum SnipeStatus {
+  PENDING
+  SCHEDULED
+  EXECUTING
+  SUCCESS
+  OUTBID
+  FAILED
+  CANCELLED
+}
+
+model Monitor {
+  id                 String        @id @default(cuid())
+  name               String
+  query              String
+  categoryId         String?
+  maxPrice           Float
+  buyingType         BuyingType    @default(ALL)
+  maxRemainingHours  Int?
+  negativeKeywords   String?       // JSON array string: "[\"ovp\", \"defekt\"]"
+  cronSchedule       String        @default("*/15 * * * *")
+  isActive           Boolean       @default(true)
+  lastRunAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  seenListings       SeenListing[]
+  snipeTasks         SnipeTask[]
+
+  @@map("monitors")
+}
+
+model SeenListing {
+  id             String      @id @default(cuid())
+  itemId         String
+  monitorId      String
+  title          String
+  price          Float
+  currency       String      @default("EUR")
+  buyingFormat   String
+  bidCount       Int?        @default(0)
+  itemUrl        String
+  imageUrl       String?
+  sellerFeedback Float?
+  endsAt         DateTime?
+  notifiedAt     DateTime    @default(now())
+  createdAt      DateTime    @default(now())
+
+  monitor        Monitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  snipeTask      SnipeTask?
+
+  @@unique([itemId, monitorId])
+  @@index([itemId])
+  @@index([monitorId])
+  @@map("seen_listings")
+}
+
+model SnipeTask {
+  id             String      @id @default(cuid())
+  itemId         String
+  seenListingId  String?     @unique
+  monitorId      String?
+  maxBid         Float
+  currency       String      @default("EUR")
+  leadTimeSec    Int         @default(6) // Seconds before end time to fire bid
+  status         SnipeStatus @default(PENDING)
+  executionLog   String?
+  executeAt      DateTime    // Precalculated: endsAt - leadTimeSec
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  seenListing    SeenListing? @relation(fields: [seenListingId], references: [id], onDelete: SetNull)
+  monitor        Monitor?     @relation(fields: [monitorId], references: [id], onDelete: SetNull)
+
+  @@index([status, executeAt])
+  @@map("snipe_tasks")
+}
+
+model NotificationSetting {
+  id          String               @id @default(cuid())
+  provider    NotificationProvider
+  name        String?
+  endpointUrl String?
+  authToken   String?
+  channel     String?
+  priority    Int                  @default(3)
+  isEnabled   Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@map("notification_settings")
+}
+
+model SystemConfig {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configs")
+}
