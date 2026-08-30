@@ -5,7 +5,7 @@ import { prisma } from "@/db/prisma";
 import { ebayClient } from "@/services/ebay/client";
 import type { EbayItemSummary } from "@/services/ebay/types";
 import { evaluateListing, listingEffectivePrice } from "@/services/filter";
-import { dispatchNewDeal } from "@/services/notifications";
+import { dispatchDealNotification } from "@/services/notifications";
 
 export interface PollCycleOptions {
   cronSchedule?: string;
@@ -127,16 +127,17 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary): Promise<
   }
 
   try {
-    await dispatchNewDeal({
-      monitorId: monitor.id,
-      monitorName: monitor.name,
+    await dispatchDealNotification({
       itemId: item.itemId,
       title: item.title,
       price: record.price,
       currency: record.currency,
       buyingFormat: record.buyingFormat,
       itemUrl: record.itemUrl,
+      imageUrl: record.imageUrl,
+      bidCount: record.bidCount,
       endsAt: record.endsAt,
+      monitorName: monitor.name,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
