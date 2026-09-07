@@ -22,6 +22,7 @@ RUN for i in 1 2 3; do \
 FROM node:20-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=4096
 ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x
 RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules

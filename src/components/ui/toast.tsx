@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -20,7 +20,7 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const push = useCallback((toast: Omit<ToastItem, "id">) => {

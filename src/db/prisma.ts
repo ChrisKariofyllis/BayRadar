@@ -1,4 +1,3 @@
-import { createClient } from "@libsql/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 import { PrismaClient } from "@prisma/client";
 
@@ -26,9 +25,7 @@ function createPrismaClient(): PrismaClient {
       );
     }
 
-    const config = { url, authToken };
-    createClient(config);
-    const adapter = new PrismaLibSQL(config);
+    const adapter = new PrismaLibSQL({ url, authToken });
     return new PrismaClient({ adapter, log: prismaLog });
   }
 
