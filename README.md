@@ -10,6 +10,10 @@
 
 Created with ⚡ by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 
+<p align="center">
+  <img src="docs/bayradar.png" alt="BayRadar dashboard with monitors, live scan, and dark Apple-style UI" width="920" />
+</p>
+
 ---
 
 ## ✨ Features

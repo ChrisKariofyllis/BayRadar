@@ -124,7 +124,7 @@ export function MonitorsView() {
         </Card>
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] lg:block">
+          <div className="hidden overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md lg:block">
             <table className="w-full text-left text-sm">
               <thead className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 <tr className="border-b border-white/[0.06]">
