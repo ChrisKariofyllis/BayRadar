@@ -1,12 +1,9 @@
 # 📡 BayRadar
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
-[![Prisma](https://img.shields.io/badge/Prisma-6-2D3748)](https://www.prisma.io)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED)](./Dockerfile)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
+[![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
 [![Version](https://img.shields.io/badge/version-v0.2.0--alpha-orange)](./package.json)
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
 
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
