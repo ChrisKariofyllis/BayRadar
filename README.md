@@ -8,7 +8,7 @@
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
 
-Created with ⚡ by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
+Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 
 <p align="center">
   <img src="docs/bayradar.png" alt="BayRadar dashboard with monitors, live scan, and dark Apple-style UI" width="920" />
