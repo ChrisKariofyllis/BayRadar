@@ -76,17 +76,31 @@ Once you want live marketplace data:
 
 ---
 
-## ☁️ Cloud Deployment (Vercel Serverless)
+## ☁️ Cloud Deployment (Vercel + Turso)
 
-**Status: Experimental**
+BayRadar uses local SQLite in Docker and remote [Turso](https://turso.tech) (libSQL) on Vercel — same `schema.prisma`, no rewrite.
 
-BayRadar ships with native SQLite. To run serverless on Vercel:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
 
-1. Provision a serverless SQLite database on [Turso](https://turso.tech).
-2. Point `DATABASE_URL` to your Turso database and configure the libSQL Prisma driver adapter.
-3. Trigger scans via external cron or Vercel Cron targeting `GET /api/cron/poll`.
+### 3-step setup
 
-> **Note:** High-precision sub-second sniping requires the self-hosted Docker daemon.
+1. **Create a free database** at [turso.tech](https://turso.tech). Copy the `libsql://…` URL and the auth token.
+2. **Click Deploy with Vercel** and paste:
+   - `DATABASE_URL` — Turso URL
+   - `TURSO_AUTH_TOKEN` — Turso token
+   - `APP_SECRET` — random string
+   - `CRON_SECRET` — random string (used by GitHub Actions and `/api/cron/poll`)
+3. **Sync the schema once** after the first deploy:
+
+   ```bash
+   DATABASE_URL="libsql://…" TURSO_AUTH_TOKEN="…" npm run db:push
+   ```
+
+   Or from any machine with the Vercel env vars: `npx prisma db push`.
+
+Hobby Vercel crons run **once per day**. For a free 10-minute poller, add GitHub Actions secrets `VERCEL_DEPLOYMENT_URL` (your `https://….vercel.app`) and `CRON_SECRET` (same value as Vercel). The workflow in `.github/workflows/cron-poll.yml` POSTs to `/api/cron/poll` and no-ops until those secrets exist.
+
+> **Note:** High-precision sub-second sniping still requires the self-hosted Docker daemon.
 
 ---
 

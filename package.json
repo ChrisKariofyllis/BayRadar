@@ -10,9 +10,12 @@
     "lint": "eslint",
     "worker": "tsx src/worker/daemon.ts",
     "ebay:search": "tsx src/services/ebay/test-search.ts",
-    "verify:mock": "tsx src/services/ebay/verify-mock-pipeline.ts"
+    "verify:mock": "tsx src/services/ebay/verify-mock-pipeline.ts",
+    "db:push": "prisma db push"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@prisma/adapter-libsql": "^6.19.3",
     "@prisma/client": "^6.19.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

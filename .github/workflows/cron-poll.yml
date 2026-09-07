@@ -1,0 +1,26 @@
+name: Cron poll
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel deal poller
+        env:
+          VERCEL_DEPLOYMENT_URL: ${{ secrets.VERCEL_DEPLOYMENT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "${VERCEL_DEPLOYMENT_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "VERCEL_DEPLOYMENT_URL or CRON_SECRET is not configured; skipping."
+            exit 0
+          fi
+
+          url="${VERCEL_DEPLOYMENT_URL%/}/api/cron/poll"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${url}"
