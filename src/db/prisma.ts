@@ -6,7 +6,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const prismaLog = process.env.NODE_ENV === "development" ? (["warn", "error"] as const) : (["error"] as const);
+const prismaLog: Array<"warn" | "error"> =
+  process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"];
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
