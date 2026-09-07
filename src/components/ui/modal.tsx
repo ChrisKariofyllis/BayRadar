@@ -37,24 +37,24 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <button aria-label="Close dialog" className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <button aria-label="Close dialog" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl sm:max-w-xl sm:rounded-2xl",
+          "relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-white/[0.08] bg-[#18181b] p-5 shadow-2xl ring-1 ring-white/10 sm:max-w-xl sm:rounded-2xl",
           className,
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">{title}</h2>
             {description ? <p className="mt-1 text-sm text-zinc-400">{description}</p> : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="rounded-xl p-1.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

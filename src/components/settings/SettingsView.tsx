@@ -194,23 +194,23 @@ export function SettingsView() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Settings</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Settings</h1>
         <p className="mt-1 text-sm text-zinc-400">eBay credentials, notification channels, and system status.</p>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-zinc-100">eBay integration</h2>
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">eBay integration</h2>
         <EbaySettingsCard />
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-zinc-100">Notification channels</h2>
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Notification channels</h2>
         <div className="grid gap-4 xl:grid-cols-2">
           {PROVIDERS.map((config) => {
             const draft = drafts[config.provider];
             return (
-              <Card key={config.provider} className="p-5">
-                <div className="mb-4 flex items-start justify-between gap-3">
+              <Card key={config.provider} className="divide-y divide-white/[0.06] p-0">
+                <div className="flex items-start justify-between gap-3 p-5">
                   <div>
                     <h3 className="font-medium text-zinc-50">{config.title}</h3>
                     <p className="mt-1 text-sm text-zinc-400">{config.blurb}</p>
@@ -224,7 +224,7 @@ export function SettingsView() {
                     />
                   </div>
                 </div>
-                <div className="grid gap-3">
+                <div className="grid gap-3 p-5">
                   {config.fields.includes("endpointUrl") ? (
                     <Field label="Endpoint URL">
                       <Input
@@ -266,7 +266,7 @@ export function SettingsView() {
                   ) : null}
                   <FieldError message={errors[config.provider]} />
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 p-5">
                   <Button variant="secondary" loading={saving === config.provider} onClick={() => save(config.provider)}>
                     Save
                   </Button>
@@ -284,10 +284,11 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-zinc-100">System status</h2>
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">System status</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="p-5">
+          <Card className="divide-y divide-white/[0.06] p-0">
+            <div className="p-5">
             <h3 className="font-medium text-zinc-50">eBay API</h3>
             <p className="mt-1 text-sm text-zinc-400">
               Resolved from the Settings form first, then <code className="text-zinc-300">.env</code>.
@@ -313,6 +314,7 @@ export function SettingsView() {
                 <dd className="text-zinc-200">{status?.ebay.marketplaceId ?? "—"}</dd>
               </div>
             </dl>
+            </div>
           </Card>
           <Card className="p-5">
             <h3 className="font-medium text-zinc-50">Poller mode</h3>

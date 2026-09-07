@@ -162,39 +162,37 @@ export function EbaySettingsCard() {
   }
 
   return (
-    <Card className="p-5">
-      <div className="mb-4">
-        <h3 className="text-lg font-medium text-zinc-50">eBay Account & API Configuration</h3>
+    <Card className="divide-y divide-white/[0.06] p-0">
+      <div className="p-5">
+        <h3 className="font-medium text-zinc-50">eBay Account & API Configuration</h3>
         <p className="mt-1 text-sm text-zinc-400">
           Stored in BayRadar&apos;s database. <code className="text-zinc-300">.env</code> values are used only as fallback.
         </p>
       </div>
 
-      <div className="mb-5 rounded-lg border border-amber-400/20 bg-amber-400/5 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h4 className="font-medium text-zinc-50">Demo / mock engine</h4>
-            <p className="mt-1 text-sm text-zinc-400">
-              Exercise the full deal pipeline while the eBay app is under review. Listings are tagged{" "}
-              <code className="text-zinc-300">[MOCK]</code>.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">{mockMode ? "On" : "Off"}</span>
-            <Switch
-              checked={mockMode}
-              disabled={savingMock}
-              onCheckedChange={toggleMock}
-              label="Enable eBay mock mode"
-            />
+      <div className="flex items-start justify-between gap-3 p-5">
+        <div>
+          <h4 className="font-medium text-zinc-50">Demo / mock engine</h4>
+          <p className="mt-1 text-sm text-zinc-400">
+            Exercise the full deal pipeline while the eBay app is under review. Listings are tagged{" "}
+            <code className="text-zinc-300">[MOCK]</code>.
+          </p>
+          <div className="mt-3">
+            <Badge tone={mockMode ? "warning" : "neutral"}>{mockReasonLabel(mockReason, mockMode)}</Badge>
           </div>
         </div>
-        <div className="mt-3">
-          <Badge tone={mockMode ? "warning" : "neutral"}>{mockReasonLabel(mockReason, mockMode)}</Badge>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">{mockMode ? "On" : "Off"}</span>
+          <Switch
+            checked={mockMode}
+            disabled={savingMock}
+            onCheckedChange={toggleMock}
+            label="Enable eBay mock mode"
+          />
         </div>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-4 p-5">
         <div className="grid gap-1.5">
           <Label htmlFor="ebay-app-id">App ID (Client ID)</Label>
           <Input
@@ -240,8 +238,8 @@ export function EbaySettingsCard() {
                   onClick={() => setEnvironment(value)}
                   className={
                     environment === value
-                      ? "h-10 rounded-lg bg-amber-400 text-sm font-medium text-zinc-950"
-                      : "h-10 rounded-lg border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-800"
+                      ? "h-10 rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-medium text-zinc-950 shadow-sm ring-1 ring-white/10"
+                      : "h-10 rounded-xl border border-white/10 text-sm text-zinc-300 hover:bg-white/[0.05]"
                   }
                 >
                   {value}
@@ -294,7 +292,7 @@ export function EbaySettingsCard() {
           <ChevronDown className={`h-4 w-4 transition ${helpOpen ? "rotate-180" : ""}`} />
         </button>
         {helpOpen ? (
-          <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-400">
+          <p className="rounded-xl border border-white/[0.08] bg-black/20 p-3 text-sm text-zinc-400">
             Create a free eBay Developer account at{" "}
             <a
               href="https://developer.ebay.com"

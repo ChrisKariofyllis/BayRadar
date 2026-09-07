@@ -36,15 +36,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[60] flex w-[min(100%-2rem,24rem)] flex-col gap-2">
+      <div className="pointer-events-none fixed right-4 top-20 z-[60] flex w-[min(100%-2rem,24rem)] flex-col gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             className={cn(
-              "pointer-events-auto flex items-start gap-3 rounded-xl border px-3 py-3 shadow-lg",
-              toast.tone === "success" && "border-emerald-500/30 bg-zinc-900 text-emerald-200",
-              toast.tone === "error" && "border-red-500/30 bg-zinc-900 text-red-200",
-              toast.tone === "info" && "border-sky-500/30 bg-zinc-900 text-sky-200",
+              "pointer-events-auto flex items-start gap-3 rounded-2xl border px-3 py-3 shadow-lg backdrop-blur-xl",
+              toast.tone === "success" && "border-emerald-500/20 bg-[#18181b]/90 text-emerald-200",
+              toast.tone === "error" && "border-red-500/20 bg-[#18181b]/90 text-red-200",
+              toast.tone === "info" && "border-sky-500/20 bg-[#18181b]/90 text-sky-200",
             )}
           >
             {toast.tone === "success" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : null}

@@ -5,20 +5,25 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        primary: "bg-amber-400 text-zinc-950 hover:bg-amber-300",
-        secondary: "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
-        outline: "border border-zinc-700 bg-transparent text-zinc-100 hover:bg-zinc-800",
-        ghost: "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50",
-        danger: "bg-red-600 text-white hover:bg-red-500",
+        primary:
+          "bg-gradient-to-b from-amber-300 to-amber-500 text-zinc-950 shadow-sm ring-1 ring-white/10 hover:from-amber-200 hover:to-amber-400",
+        secondary:
+          "bg-white/[0.06] text-zinc-100 shadow-sm ring-1 ring-white/10 hover:bg-white/[0.1]",
+        outline:
+          "border border-white/[0.1] bg-transparent text-zinc-100 hover:bg-white/[0.05]",
+        ghost: "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-50",
+        danger: "bg-red-500/90 text-white shadow-sm ring-1 ring-white/10 hover:bg-red-500",
+        destructive:
+          "text-muted-foreground hover:bg-red-500/10 hover:text-red-400",
       },
       size: {
         sm: "h-8 px-3",
-        md: "h-10 px-4",
-        icon: "h-10 w-10",
+        md: "h-9 px-3.5",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {

@@ -1,11 +1,11 @@
 "use client";
 
 import { Radar } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
-import { useState } from "react";
 
 export function ScanButton({ compact = false }: { compact?: boolean }) {
   const { push } = useToast();
@@ -38,9 +38,9 @@ export function ScanButton({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <Button onClick={triggerScan} loading={loading} size={compact ? "sm" : "md"}>
+    <Button onClick={triggerScan} loading={loading} variant="secondary" size="sm">
       <Radar className="h-4 w-4" />
-      {compact ? "Scan" : "Trigger Scan Now"}
+      <span className="hidden sm:inline">{compact ? "Trigger Scan" : "Trigger Scan"}</span>
     </Button>
   );
 }
