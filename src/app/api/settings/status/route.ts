@@ -1,5 +1,6 @@
 import { jsonOk } from "@/lib/api";
 import { getEbayRuntimeConfig } from "@/services/config";
+import { resolveEbayMockDecision } from "@/services/ebay/mock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const ebay = await getEbayRuntimeConfig();
   const configuredMode = process.env.POLLER_MODE?.trim().toLowerCase();
+  const mock = await resolveEbayMockDecision({
+    hasCredentials: Boolean(ebay.appId && ebay.certId),
+  });
 
   return jsonOk({
     ebay: {
@@ -15,6 +19,8 @@ export async function GET() {
       certIdConfigured: Boolean(ebay.certId),
       environment: ebay.environment,
       marketplaceId: ebay.marketplaceId,
+      mockMode: mock.enabled,
+      mockReason: mock.reason,
     },
     poller: {
       mode: configuredMode === "worker" || configuredMode === "serverless" ? configuredMode : "hybrid",

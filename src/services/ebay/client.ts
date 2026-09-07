@@ -1,6 +1,11 @@
 import { getEbayRuntimeConfig } from "@/services/config";
 
 import { EbayAuthManager, ebayApiBaseUrl } from "./auth";
+import {
+  isAuthOrCredentialError,
+  resolveEbayMockDecision,
+  searchMockItems,
+} from "./mock";
 import type { EbaySearchResponse, SearchParams } from "./types";
 
 const SEARCH_PATH = "/buy/browse/v1/item_summary/search";
@@ -68,8 +73,37 @@ export class EbayApiError extends Error {
 
 export class EbayClient {
   async searchItems(params: SearchParams): Promise<EbaySearchResponse> {
-    const url = await this.buildSearchUrl(params);
-    return this.requestJson<EbaySearchResponse>(url, params.query);
+    const config = await getEbayRuntimeConfig();
+    const hasCredentials = Boolean(config.appId && config.certId);
+    const mock = await resolveEbayMockDecision({ hasCredentials });
+
+    if (mock.enabled) {
+      console.log(`[ebay] Using mock catalog (reason=${mock.reason}) for "${params.query}"`);
+      return searchMockItems(params);
+    }
+
+    try {
+      const url = await this.buildSearchUrl(params);
+      return await this.requestJson<EbaySearchResponse>(url, params.query);
+    } catch (error) {
+      if (mock.forcedOff || !isAuthOrCredentialError(error)) {
+        throw error;
+      }
+
+      const fallback = await resolveEbayMockDecision({
+        hasCredentials,
+        invalidCredentials: true,
+      });
+      if (!fallback.enabled) {
+        throw error;
+      }
+
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[ebay] Live Browse search failed (${reason}). Falling back to mock catalog.`,
+      );
+      return searchMockItems(params);
+    }
   }
 
   async buildSearchUrl(params: SearchParams): Promise<string> {

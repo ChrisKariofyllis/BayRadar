@@ -9,4 +9,9 @@ export const ebaySettingsSchema = z.object({
   marketplaceId: z.enum(EBAY_MARKETPLACE_IDS).default("EBAY_DE"),
 });
 
+export const ebayMockModeSchema = z.object({
+  mockMode: z.boolean(),
+});
+
 export type EbaySettingsInput = z.infer<typeof ebaySettingsSchema>;
+export type EbayMockModeInput = z.infer<typeof ebayMockModeSchema>;

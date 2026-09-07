@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
 import { EBAY_MARKETPLACES } from "@/lib/ebay-marketplaces";
@@ -16,12 +17,15 @@ interface EbaySettingsResponse {
   environment: "PRODUCTION" | "SANDBOX";
   marketplaceId: string;
   hasCertId: boolean;
+  mockMode: boolean;
+  mockReason: "env" | "settings" | "missing-credentials" | "invalid-credentials" | "off";
 }
 
 interface EbayTestResponse {
   success: boolean;
   message: string;
   marketplace: string;
+  mock?: boolean;
 }
 
 export function EbaySettingsCard() {
@@ -38,6 +42,9 @@ export function EbaySettingsCard() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<EbayTestResponse | null>(null);
+  const [mockMode, setMockMode] = useState(false);
+  const [mockReason, setMockReason] = useState<EbaySettingsResponse["mockReason"]>("off");
+  const [savingMock, setSavingMock] = useState(false);
 
   useEffect(() => {
     api<EbaySettingsResponse>("/api/settings/ebay")
@@ -46,6 +53,8 @@ export function EbaySettingsCard() {
         setHasCertId(Boolean(data.hasCertId));
         setEnvironment(data.environment ?? "PRODUCTION");
         setMarketplaceId(data.marketplaceId ?? "EBAY_DE");
+        setMockMode(Boolean(data.mockMode));
+        setMockReason(data.mockReason ?? "off");
       })
       .catch((err) => {
         push({
@@ -106,7 +115,11 @@ export function EbaySettingsCard() {
       setTestResult(result);
       push({
         tone: result.success ? "success" : "error",
-        title: result.success ? "eBay connection OK" : "eBay connection failed",
+        title: result.success
+          ? result.mock
+            ? "Mock catalog ready"
+            : "eBay connection OK"
+          : "eBay connection failed",
         description: result.message,
       });
     } catch (err) {
@@ -118,6 +131,36 @@ export function EbaySettingsCard() {
     }
   }
 
+  async function toggleMock(next: boolean) {
+    setSavingMock(true);
+    const previous = mockMode;
+    setMockMode(next);
+    try {
+      const result = await api<Pick<EbaySettingsResponse, "mockMode" | "mockReason">>("/api/settings/ebay", {
+        method: "PATCH",
+        body: JSON.stringify({ mockMode: next }),
+      });
+      setMockMode(result.mockMode);
+      setMockReason(result.mockReason);
+      push({
+        tone: "success",
+        title: result.mockMode ? "eBay mock mode enabled" : "eBay mock mode disabled",
+        description: result.mockMode
+          ? "Poller, filters, and notifications will use the simulated catalog."
+          : "Live eBay Browse API will be used when credentials are present.",
+      });
+    } catch (err) {
+      setMockMode(previous);
+      push({
+        tone: "error",
+        title: "Could not update mock mode",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    } finally {
+      setSavingMock(false);
+    }
+  }
+
   return (
     <Card className="p-5">
       <div className="mb-4">
@@ -125,6 +168,30 @@ export function EbaySettingsCard() {
         <p className="mt-1 text-sm text-zinc-400">
           Stored in BayRadar&apos;s database. <code className="text-zinc-300">.env</code> values are used only as fallback.
         </p>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-amber-400/20 bg-amber-400/5 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="font-medium text-zinc-50">Demo / mock engine</h4>
+            <p className="mt-1 text-sm text-zinc-400">
+              Exercise the full deal pipeline while the eBay app is under review. Listings are tagged{" "}
+              <code className="text-zinc-300">[MOCK]</code>.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">{mockMode ? "On" : "Off"}</span>
+            <Switch
+              checked={mockMode}
+              disabled={savingMock}
+              onCheckedChange={toggleMock}
+              label="Enable eBay mock mode"
+            />
+          </div>
+        </div>
+        <div className="mt-3">
+          <Badge tone={mockMode ? "warning" : "neutral"}>{mockReasonLabel(mockReason, mockMode)}</Badge>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -243,4 +310,13 @@ export function EbaySettingsCard() {
       </div>
     </Card>
   );
+}
+
+function mockReasonLabel(reason: EbaySettingsResponse["mockReason"], enabled: boolean): string {
+  if (!enabled) return "Live eBay API";
+  if (reason === "env") return "Forced on via EBAY_MOCK_MODE";
+  if (reason === "settings") return "Enabled in Settings";
+  if (reason === "missing-credentials") return "Auto-on — eBay keys not configured";
+  if (reason === "invalid-credentials") return "Fallback — credentials rejected";
+  return "Mock catalog active";
 }

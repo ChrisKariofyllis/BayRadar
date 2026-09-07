@@ -31,15 +31,13 @@ function formatBuyingFormat(item: EbayItemSummary): string {
 async function main(): Promise<void> {
   const missing = await missingCredentialNames();
   if (missing.length > 0) {
-    console.warn("eBay credentials are not configured. Skipping live Browse API search.");
+    console.warn("eBay credentials are not configured. Using the mock catalog.");
     console.warn("Add them in Settings → eBay Account, or set these in .env:");
     console.warn(`  ${missing.join("\n  ")}`);
-    process.exitCode = 1;
-    return;
+  } else {
+    const token = await EbayAuthManager.getAccessToken();
+    console.log(`OAuth token acquired (${token.slice(0, 12)}…), running test search.`);
   }
-
-  const token = await EbayAuthManager.getAccessToken();
-  console.log(`OAuth token acquired (${token.slice(0, 12)}…), running test search.`);
 
   const result = await ebayClient.searchItems({
     query: TEST_QUERY,

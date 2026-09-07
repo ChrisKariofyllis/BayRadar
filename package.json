@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "worker": "tsx src/worker/daemon.ts",
-    "ebay:search": "tsx src/services/ebay/test-search.ts"
+    "ebay:search": "tsx src/services/ebay/test-search.ts",
+    "verify:mock": "tsx src/services/ebay/verify-mock-pipeline.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

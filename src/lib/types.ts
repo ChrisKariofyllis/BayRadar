@@ -57,6 +57,8 @@ export interface SystemStatus {
     certIdConfigured: boolean;
     environment: string;
     marketplaceId: string;
+    mockMode: boolean;
+    mockReason: "env" | "settings" | "missing-credentials" | "invalid-credentials" | "off";
   };
   poller: {
     mode: "hybrid" | "worker" | "serverless";

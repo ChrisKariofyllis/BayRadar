@@ -10,17 +10,24 @@ export async function POST() {
   const config = await getEbayRuntimeConfig();
 
   try {
-    await EbayAuthManager.getAccessToken();
     const search = await ebayClient.searchItems({
-      query: "nintendo",
+      query: "playstation",
       buyingType: "ALL",
       limit: 1,
     });
+    const usedMock = search.warnings?.some((warning) => /mock catalog/i.test(warning.message));
+
+    if (!usedMock) {
+      await EbayAuthManager.getAccessToken();
+    }
 
     return jsonOk({
       success: true,
-      message: `Connected to ${config.environment}. Browse API returned ${search.total} result(s).`,
+      message: usedMock
+        ? `Mock catalog ready. Simulated Browse search returned ${search.total} result(s).`
+        : `Connected to ${config.environment}. Browse API returned ${search.total} result(s).`,
       marketplace: config.marketplaceId,
+      mock: Boolean(usedMock),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -293,8 +293,12 @@ export function SettingsView() {
               Resolved from the Settings form first, then <code className="text-zinc-300">.env</code>.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone={status?.ebay.configured ? "success" : "danger"}>
-                {status?.ebay.configured ? "Configured" : "Missing credentials"}
+              <Badge tone={status?.ebay.mockMode ? "warning" : status?.ebay.configured ? "success" : "danger"}>
+                {status?.ebay.mockMode
+                  ? "Mock catalog"
+                  : status?.ebay.configured
+                    ? "Configured"
+                    : "Missing credentials"}
               </Badge>
               <Badge tone={status?.ebay.appIdConfigured ? "success" : "warning"}>EBAY_APP_ID</Badge>
               <Badge tone={status?.ebay.certIdConfigured ? "success" : "warning"}>EBAY_CERT_ID</Badge>
