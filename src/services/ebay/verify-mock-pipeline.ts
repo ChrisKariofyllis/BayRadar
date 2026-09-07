@@ -11,7 +11,7 @@ import type { EbayItemSummary } from "./types";
 
 process.env.EBAY_MOCK_MODE = "true";
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = "file:./prisma/data/bayradar.db";
+  process.env.DATABASE_URL = "file:./data/bayradar.db";
 }
 
 interface CapturedAlert {
