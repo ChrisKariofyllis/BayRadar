@@ -1,4 +1,5 @@
 import { prisma } from "@/db/prisma";
+import { DEFAULT_AI_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
 
 export async function getConfigValue(key: string): Promise<string | undefined> {
   const row = await prisma.systemConfig.findUnique({
@@ -42,4 +43,31 @@ export async function getEbayRuntimeConfig() {
     environment: environment === "SANDBOX" ? ("SANDBOX" as const) : ("PRODUCTION" as const),
     marketplaceId: marketplaceId || "EBAY_DE",
   };
+}
+
+export async function getAiRuntimeConfig() {
+  const row = await prisma.aiSettings.findUnique({ where: { id: "default" } });
+  const envBase = process.env.AI_BASE_URL?.trim();
+  const envKey = process.env.AI_API_KEY?.trim();
+  const envModel = process.env.AI_MODEL?.trim();
+
+  const aiBaseUrl = row?.aiBaseUrl?.trim() || envBase || DEFAULT_AI_BASE_URL;
+  const aiApiKey = row?.aiApiKey?.trim() || envKey || "";
+  const aiModel = row?.aiModel?.trim() || envModel || DEFAULT_AI_MODEL;
+
+  return {
+    aiBaseUrl,
+    aiApiKey,
+    aiModel,
+    configured: Boolean(aiApiKey) || isLocalAiEndpoint(aiBaseUrl),
+  };
+}
+
+export function isLocalAiEndpoint(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "host.docker.internal";
+  } catch {
+    return false;
+  }
 }
