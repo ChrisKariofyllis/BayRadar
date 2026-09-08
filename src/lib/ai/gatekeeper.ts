@@ -24,35 +24,30 @@ export async function verifyListingWithAi(params: GatekeeperParams): Promise<Gat
   }
 
   const format = params.buyingFormat || "UNKNOWN";
-  const lookingForBroken = /\b(defekt|bastler|broken|parts? only|ersatzteilspender)\b/i.test(params.targetQuery);
-  const system = `You are a zero-tolerance deal-evaluation gatekeeper for an automated shopping bot.
-The buyer wants ONLY the core main system or device itself: "${params.targetQuery}".
-Analyze the listing title: "${params.title}" priced at ${params.price} ${params.currency} (${format}) on marketplace "${params.marketplaceId}".
+  const system = `You are an expert personal shopping assistant evaluating eBay listings for a buyer.
+The user's intended target item is: "${params.targetQuery}".
+Listing to evaluate: "${params.title}" priced at ${params.price} ${params.currency} (${format}) on marketplace "${params.marketplaceId}".
 
-isGenuine must be true ONLY if the listing is the genuine, complete, functional target product itself — not something that merely mentions the target.
+Your goal: Determine if this listing fulfills the buyer's underlying purchase intent.
 
-German marketplace nuance (EBAY_DE):
-- "mit OVP" or "- OVP" means the device includes the original box. ACCEPT if it is the full phone/console.
-- "nur OVP", "leere Verpackung", "leerer Karton", "Karton ohne Gerät" means empty packaging. REJECT.
-- Cosmetic wear is still a genuine device: "Riss auf der Rückseite", "Kratzer", "Gebraucht", "gebraucht", "akzeptabler Zustand". ACCEPT.
-- Non-working units: "Defekt", "für Bastler", "Ersatzteilspender", "geht nicht". REJECT unless the buyer explicitly searched for broken items (buyer search broken=${lookingForBroken}).
+Evaluation Rules:
+1. INTENT & UPGRADES (ACCEPT):
+   - Accept genuine products matching the target intent.
+   - Accept equivalent or superior models/variants unless the user explicitly specified negative exclusions (e.g., if user searches "PS5" or "PS5 825GB", ACCEPT PS5 Disc, PS5 Digital, PS5 Slim, or 1TB models).
+   - Accept bundles (e.g., console + games, phone + original charger, extra controllers).
+   - Accept minor cosmetic wear (e.g., "Kratzer", "Gebraucht", "Gebrauchsspuren").
+   - German marketplace: "mit OVP" or "- OVP" means the device includes the original box. ACCEPT if it is the full product.
 
-REJECT instantly (isGenuine=false) if the listing is:
-- An accessory or third-party add-on, even when the title says "für ${params.targetQuery}" / "for ${params.targetQuery}".
-- Console accessories: steering wheel (Lenkrad, wheel), Joy-Con set, controller, grip, dock, stand, charger, cable, carrying case, skin, bracket, screen protector.
-- Phone accessories or parts: display, bildschirm, motherboard, mainboard, battery, kamera, glass, frame, charger, cable, hülle, case, empty box.
-- A repair, unlocking, or service listing.
-- A dummy, replica, or empty packaging only.
-- A different sub-model or downgrade (e.g. target "Xiaomi 14" but listing is 14T, 14 Ultra, Redmi, Note, Lite if the buyer specified the base model only).
-
-Price feasibility: if this is Buy It Now / FIXED_PRICE and the price is under 35% of typical market value for a complete console or phone matching the target, treat it as an accessory or part and REJECT.
-
-Default to false when unsure. Never approve an accessory because the brand or model name appears in the title.
+2. DEFECTS & JUNK (REJECT):
+   - REJECT broken, malfunctioning, or defective hardware (e.g., "Absturz", "defekt", "für Bastler", "Fehler", "spares", "untested").
+   - REJECT accessories, parts, and add-ons (e.g., steering wheels, stands, faceplates, Joy-Cons only, screens, replacement housing).
+   - REJECT empty packaging, dummy units, or boxes ("nur OVP", "leere Schachtel", "leere Verpackung", "Karton ohne Gerät").
+   - REJECT inferior downgrades or completely different products (e.g., PS4 when target is PS5; Xiaomi 14 Lite/Redmi when target is Xiaomi 14).
 
 Return JSON ONLY:
 {
   "isGenuine": boolean,
-  "reason": "Short 3-6 word explanation"
+  "reason": "Clear 3-6 word justification"
 }`;
 
   const endpoint = `${trimTrailingSlash(config.aiBaseUrl)}/chat/completions`;
@@ -71,7 +66,7 @@ Return JSON ONLY:
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(12_000),
       body: JSON.stringify({
         model: config.aiModel,
         temperature: 0.1,
