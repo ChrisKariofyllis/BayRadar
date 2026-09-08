@@ -31,10 +31,18 @@ export function DealCard({ listing }: { listing: SeenListing }) {
             <ImageOff className="h-8 w-8" />
           </div>
         )}
-        <div className="absolute left-3 top-3">
+        <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
           <span className="rounded-full border border-white/15 bg-black/40 px-2 py-0.5 text-xs text-zinc-100 backdrop-blur-md">
             {listingFormatLabel(listing.buyingFormat)}
           </span>
+          {listing.aiVerified ? (
+            <span
+              title={listing.aiVerificationReason || "AI verified this listing as the genuine product"}
+              className="inline-flex items-center gap-1 rounded-full border border-violet-300/25 bg-violet-500/20 px-2 py-0.5 text-xs text-violet-100 backdrop-blur-md"
+            >
+              ✨ AI Verified
+            </span>
+          ) : null}
         </div>
         <div className="absolute right-3 top-3">
           <span className="rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-sm font-medium tabular-nums text-zinc-50 backdrop-blur-md">
