@@ -228,6 +228,7 @@ function matchesBuyingType(item: EbayItemSummary, buyingType: SearchParams["buyi
 
 function tokenize(query: string): string[] {
   return normalize(query)
+    .replace(/(\d+)(gb|tb|mb)\b/g, "$1 $2")
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
 }

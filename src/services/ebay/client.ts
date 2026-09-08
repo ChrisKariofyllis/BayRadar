@@ -1,3 +1,4 @@
+import { expandEbaySearchQuery } from "@/lib/ebay/expand-query";
 import { getEbayRuntimeConfig } from "@/services/config";
 
 import { EbayAuthManager, ebayApiBaseUrl } from "./auth";
@@ -113,7 +114,11 @@ export class EbayClient {
       throw new EbayApiError("Search query must not be empty.");
     }
 
-    query.set("q", q);
+    const expanded = expandEbaySearchQuery(q);
+    if (expanded !== q) {
+      console.log(`[ebay] Expanded search q: "${q}" → "${expanded}"`);
+    }
+    query.set("q", expanded);
 
     const categoryId = params.categoryId?.trim();
     if (categoryId) {
