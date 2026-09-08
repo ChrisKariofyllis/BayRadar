@@ -1,3 +1,4 @@
+import { parseNegativesJson, sanitizeNegativeKeywords } from "@/lib/ai/sanitize-negatives";
 import { BodyParseError, jsonError, jsonOk, jsonValidationError, readJsonBody } from "@/lib/api";
 import { suggestNegativesSchema } from "@/lib/schemas/ai-settings";
 import { AiClientError, completeChat, parseKeywordList } from "@/services/ai/client";
@@ -18,20 +19,36 @@ export async function POST(request: Request) {
         ? ` Price window: ${minPrice ?? "any"} to ${maxPrice ?? "any"}.`
         : "";
 
-    const system = `You are an expert eBay deal sniper assistant. The user wants to buy the physical, genuine standalone device: "${query}" on marketplace "${marketplaceId}". Analyze common search junk for this specific device and output negative keywords to exclude:
-    1. Replacement hardware parts & repairs (e.g. in German for EBAY_DE: display, bildschirm, ersatzteil, reparatur, akku, rückseite, mainboard, kamera, defekt).
-    2. Sub-brands, budget variations, or conflicting models if user specified a base model (e.g. for "Xiaomi 14", exclude "14t", "redmi", "note", "ultra", "pro", "lite").
-    3. Empty boxes, accessories, and promotional items (e.g. ovp, karton, dummy, hülle, panzerglas, schutzfolie).
-    Return ONLY a comma-separated list of 15-25 lowercase negative keywords in the marketplace language. No numbering, no introductory text, no markdown.`;
+    const system = `You generate negative keywords for an eBay search filter.
+The buyer is searching for exactly: "${query}" on marketplace "${marketplaceId}".
+
+Return JSON ONLY in this shape:
+{ "negatives": ["term1", "term2"] }
+
+Rules:
+- Output 12-22 short lowercase keywords or 2-word phrases in the marketplace language.
+- MUST NEVER return any word that already appears in the user's query. If the query is "Honor Magic 6 Pro", never output honor, magic, 6, or pro.
+- NEVER output conversational filler: etc, wait, exclude, devices, variations, brands, or any explanation.
+- NEVER output standalone numbers.
+- German eBay packaging: exclude "nur ovp", "leerer karton", "schachtel", "leere verpackung". NEVER exclude standalone "ovp" (sellers use it to mean the device includes the original box).
+- Target only junk:
+  - accessories: hülle, case, panzerglas, folie, ladegerät, kabel
+  - replacement parts: display, bildschirm, ersatzteil, akku, rückseite, reparatur, mainboard
+  - conflicting budget / sibling lines that are NOT in the query (e.g. lite, 14t, redmi, note) only when they would steal results from this exact model.
+- Each term must be 3-24 characters. No quotes, brackets, colons, markdown, or numbering.`;
 
     const completion = await completeChat({
       system,
-      prompt: `Device: ${query}. Marketplace: ${marketplaceId}.${priceHint} Return the negative keyword list now.`,
+      prompt: `Device query: ${query}. Marketplace: ${marketplaceId}.${priceHint} Return JSON {"negatives":[...]} now.`,
       maxTokens: 400,
-      temperature: 0.3,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
     });
 
-    const keywords = parseKeywordList(completion).slice(0, 25);
+    const extracted = parseNegativesJson(completion);
+    const fallback = extracted.length > 0 ? extracted : parseKeywordList(completion);
+    const keywords = sanitizeNegativeKeywords(fallback, query).slice(0, 25);
+
     if (keywords.length < 5) {
       return jsonError("AI returned too few usable keywords. Try a more specific search query.", 502);
     }

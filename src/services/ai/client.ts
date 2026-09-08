@@ -22,6 +22,7 @@ export async function completeChat(options: {
   system?: string;
   maxTokens?: number;
   temperature?: number;
+  responseFormat?: { type: "json_object" };
 }): Promise<string> {
   const config = await getAiRuntimeConfig();
   if (!config.aiApiKey && !isLocalAiEndpoint(config.aiBaseUrl)) {
@@ -53,6 +54,7 @@ export async function completeChat(options: {
         model: config.aiModel,
         temperature: options.temperature ?? 0.2,
         max_tokens: options.maxTokens ?? 400,
+        ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
         messages: [
           ...(options.system ? [{ role: "system", content: options.system }] : []),
           { role: "user", content: options.prompt },
