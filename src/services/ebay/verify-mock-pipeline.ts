@@ -21,7 +21,7 @@ interface CapturedAlert {
 
 function filterMonitor(
   partial: Pick<Monitor, "maxPrice" | "buyingType" | "maxRemainingHours" | "negativeKeywords"> &
-    Partial<Pick<Monitor, "minPrice">>,
+    Partial<Pick<Monitor, "minPrice" | "aiVerify">>,
 ): Monitor {
   return {
     id: "verify",
@@ -35,6 +35,7 @@ function filterMonitor(
     updatedAt: new Date(),
     ...partial,
     minPrice: partial.minPrice ?? null,
+    aiVerify: partial.aiVerify ?? false,
   };
 }
 

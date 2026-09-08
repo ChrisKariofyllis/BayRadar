@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import type { Monitor } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
+import { verifyListingWithAi } from "@/lib/ai/gatekeeper";
+import { getEbayRuntimeConfig } from "@/services/config";
 import { ebayClient } from "@/services/ebay/client";
 import type { EbayItemSummary } from "@/services/ebay/types";
 import { evaluateListing, listingEffectivePrice } from "@/services/filter";
@@ -84,6 +86,7 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
 
   const items = search.itemSummaries ?? [];
   let newDeals = 0;
+  const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
 
   for (const item of items) {
     if (!item.itemId || !item.title) continue;
@@ -94,7 +97,7 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
     const dealPrice = listingEffectivePrice(item);
     if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) continue;
 
-    const created = await persistNewDeal(monitor, item);
+    const created = await persistNewDeal(monitor, item, marketplaceId);
     if (created) newDeals += 1;
   }
 
@@ -106,7 +109,7 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   return newDeals;
 }
 
-async function persistNewDeal(monitor: Monitor, item: EbayItemSummary): Promise<boolean> {
+async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketplaceId: string): Promise<boolean> {
   const existing = await prisma.seenListing.findUnique({
     where: {
       itemId_monitorId: {
@@ -119,7 +122,34 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary): Promise<
 
   if (existing) return false;
 
-  const record = toSeenListingInput(monitor.id, item);
+  let aiVerified = false;
+  let aiVerificationReason: string | null = null;
+
+  if (monitor.aiVerify) {
+    const price = listingEffectivePrice(item) ?? 0;
+    const currency = item.currentBidPrice?.currency ?? item.price?.currency ?? "EUR";
+    const gate = await verifyListingWithAi({
+      targetQuery: monitor.query,
+      title: item.title,
+      price,
+      currency,
+      marketplaceId,
+    });
+
+    if (!gate.isGenuine) {
+      console.log(`[ai-gatekeeper] ❌ Dropped junk listing: "${item.title}" | Reason: ${gate.reason}`);
+      return false;
+    }
+
+    aiVerified = true;
+    aiVerificationReason = gate.reason;
+  }
+
+  const record = {
+    ...toSeenListingInput(monitor.id, item),
+    aiVerified,
+    aiVerificationReason,
+  };
 
   try {
     await prisma.seenListing.create({ data: record });
