@@ -152,6 +152,7 @@ export function MonitorsView() {
                         <Capsule>{formatBuyingType(monitor.buyingType)}</Capsule>
                         {monitor.categoryId ? <Capsule>Cat {monitor.categoryId}</Capsule> : null}
                         {monitor.maxRemainingHours ? <Capsule>{monitor.maxRemainingHours}h left</Capsule> : null}
+                        {monitor.aiVerify ? <Capsule>✨ Gatekeeper</Capsule> : null}
                         {parseKeywords(monitor.negativeKeywords).map((keyword) => (
                           <Capsule key={keyword}>{keyword}</Capsule>
                         ))}
@@ -213,6 +214,7 @@ export function MonitorsView() {
                   </Capsule>
                   <Capsule>{formatBuyingType(monitor.buyingType)}</Capsule>
                   {monitor.maxRemainingHours ? <Capsule>{monitor.maxRemainingHours}h</Capsule> : null}
+                  {monitor.aiVerify ? <Capsule>✨ Gatekeeper</Capsule> : null}
                   {parseKeywords(monitor.negativeKeywords).map((keyword) => (
                     <Capsule key={keyword}>{keyword}</Capsule>
                   ))}
