@@ -32,6 +32,11 @@ export async function GET(request: Request) {
   return jsonOk({ listings });
 }
 
+export async function DELETE() {
+  const deleted = await prisma.seenListing.deleteMany({});
+  return jsonOk({ success: true, count: deleted.count });
+}
+
 function clampLimit(value: number): number {
   if (!Number.isFinite(value) || value < 1) return 80;
   return Math.min(Math.floor(value), 200);

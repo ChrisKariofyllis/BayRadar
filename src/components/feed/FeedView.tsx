@@ -1,10 +1,13 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { DealCard } from "@/components/feed/DealCard";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
 import type { Monitor, SeenListing } from "@/lib/types";
@@ -14,6 +17,8 @@ export function FeedView() {
   const [listings, setListings] = useState<SeenListing[]>([]);
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [monitorId, setMonitorId] = useState("");
   const [format, setFormat] = useState("");
   const [query, setQuery] = useState("");
@@ -50,11 +55,45 @@ export function FeedView() {
 
   const empty = useMemo(() => !loading && listings.length === 0, [loading, listings.length]);
 
+  async function clearFeed() {
+    setClearing(true);
+    try {
+      const result = await api<{ success: boolean; count: number }>("/api/feed", { method: "DELETE" });
+      setListings([]);
+      setConfirmClear(false);
+      push({
+        tone: "success",
+        title: "Feed cleared",
+        description: `Removed ${result.count} deal${result.count === 1 ? "" : "s"}. The next scan will refill matches.`,
+      });
+    } catch (error) {
+      push({
+        tone: "error",
+        title: "Could not clear feed",
+        description: error instanceof ApiError ? error.message : undefined,
+      });
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Deals Feed</h1>
-        <p className="mt-1 text-sm text-zinc-400">Matched listings saved from your monitors, newest first.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Deals Feed</h1>
+          <p className="mt-1 text-sm text-zinc-400">Matched listings saved from your monitors, newest first.</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setConfirmClear(true)}
+          className="text-zinc-400 hover:bg-red-500/10 hover:text-red-400"
+        >
+          <Trash2 className="h-4 w-4" />
+          Clear Feed
+        </Button>
       </div>
 
       <Card className="grid gap-3 p-4 md:grid-cols-3">
@@ -91,6 +130,22 @@ export function FeedView() {
           ))}
         </div>
       )}
+
+      <Modal
+        open={confirmClear}
+        title="Clear all deals?"
+        description="This will empty your feed until the next scan."
+        onClose={() => setConfirmClear(false)}
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirmClear(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" loading={clearing} onClick={() => void clearFeed()}>
+            Clear Feed
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
