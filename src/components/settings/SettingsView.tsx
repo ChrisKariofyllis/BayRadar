@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
+import { AiSettingsCard } from "@/components/settings/AiSettingsCard";
 import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -195,12 +196,19 @@ export function SettingsView() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">eBay credentials, notification channels, and system status.</p>
+        <p className="mt-1 text-sm text-zinc-400">
+          eBay credentials, AI exclusions, notification channels, and system status.
+        </p>
       </div>
 
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">eBay integration</h2>
         <EbaySettingsCard />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">AI configuration</h2>
+        <AiSettingsCard />
       </section>
 
       <section className="space-y-2">
@@ -286,7 +294,7 @@ export function SettingsView() {
 
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">System status</h2>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Card className="divide-y divide-white/[0.06] p-0">
             <div className="p-5">
             <h3 className="font-medium text-zinc-50">eBay API</h3>
@@ -315,6 +323,27 @@ export function SettingsView() {
               </div>
             </dl>
             </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-medium text-zinc-50">AI provider</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Used by AI Smart Exclude on monitors. Local Ollama does not need an API key.
+            </p>
+            <div className="mt-4">
+              <Badge tone={status?.ai?.configured ? "success" : "warning"}>
+                {status?.ai?.configured ? "Configured" : "Not configured"}
+              </Badge>
+            </div>
+            <dl className="mt-4 grid gap-2 text-sm text-zinc-400">
+              <div className="flex justify-between gap-4">
+                <dt>Model</dt>
+                <dd className="truncate text-zinc-200">{status?.ai?.model ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt>Base URL</dt>
+                <dd className="truncate text-zinc-200">{status?.ai?.baseUrl ?? "—"}</dd>
+              </div>
+            </dl>
           </Card>
           <Card className="p-5">
             <h3 className="font-medium text-zinc-50">Poller mode</h3>

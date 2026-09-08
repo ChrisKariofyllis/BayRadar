@@ -61,6 +61,11 @@ export interface SystemStatus {
     mockMode: boolean;
     mockReason: "env" | "settings" | "missing-credentials" | "invalid-credentials" | "off";
   };
+  ai: {
+    configured: boolean;
+    model: string;
+    baseUrl: string;
+  };
   poller: {
     mode: "hybrid" | "worker" | "serverless";
     defaultCron: string;
