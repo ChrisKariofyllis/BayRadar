@@ -31,6 +31,7 @@ export const createMonitorSchema = z
     maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
     negativeKeywords: negativeKeywordsSchema,
     cronSchedule: cronScheduleSchema.optional().default("*/15 * * * *"),
+    aiVerify: z.boolean().optional().default(false),
     isActive: z.boolean().optional().default(true),
   })
   .refine((value) => value.minPrice == null || value.minPrice < value.maxPrice, {
@@ -49,6 +50,7 @@ export const updateMonitorSchema = z
     maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
     negativeKeywords: negativeKeywordsSchema,
     cronSchedule: cronScheduleSchema.optional(),
+    aiVerify: z.boolean().optional(),
     isActive: z.boolean().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {

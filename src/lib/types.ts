@@ -12,6 +12,7 @@ export interface Monitor {
   maxRemainingHours: number | null;
   negativeKeywords: string | null;
   cronSchedule: string;
+  aiVerify: boolean;
   isActive: boolean;
   lastRunAt: string | null;
   createdAt: string;
@@ -34,6 +35,8 @@ export interface SeenListing {
   endsAt: string | null;
   notifiedAt: string;
   createdAt: string;
+  aiVerified: boolean;
+  aiVerificationReason: string | null;
   monitor: { id: string; name: string };
 }
 
