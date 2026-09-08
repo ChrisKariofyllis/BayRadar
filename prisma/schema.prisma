@@ -42,6 +42,7 @@ model Monitor {
   maxRemainingHours  Int?
   negativeKeywords   String?       // JSON array string: "[\"ovp\", \"defekt\"]"
   cronSchedule       String        @default("*/15 * * * *")
+  aiVerify           Boolean       @default(false)
   isActive           Boolean       @default(true)
   lastRunAt          DateTime?
   createdAt          DateTime      @default(now())
@@ -68,6 +69,8 @@ model SeenListing {
   endsAt         DateTime?
   notifiedAt     DateTime    @default(now())
   createdAt      DateTime    @default(now())
+  aiVerified     Boolean     @default(false)
+  aiVerificationReason String?
 
   monitor        Monitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
   snipeTask      SnipeTask?
