@@ -130,6 +130,10 @@ export function matchesMockSearch(item: EbayItemSummary, params: SearchParams): 
       return false;
     }
   }
+  const price = Number.parseFloat(item.currentBidPrice?.value ?? item.price?.value ?? "");
+  if (!Number.isFinite(price)) return false;
+  if (params.minPrice != null && price < params.minPrice) return false;
+  if (params.maxPrice != null && price > params.maxPrice) return false;
   return true;
 }
 

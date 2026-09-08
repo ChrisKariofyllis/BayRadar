@@ -6,6 +6,7 @@ export interface Monitor {
   name: string;
   query: string;
   categoryId: string | null;
+  minPrice: number | null;
   maxPrice: number;
   buyingType: BuyingType;
   maxRemainingHours: number | null;

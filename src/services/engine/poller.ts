@@ -76,6 +76,7 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   const search = await ebayClient.searchItems({
     query: monitor.query,
     categoryId: monitor.categoryId,
+    minPrice: monitor.minPrice ?? undefined,
     maxPrice: monitor.maxPrice,
     buyingType: monitor.buyingType,
     sort: monitor.buyingType === "AUCTION" ? "endingSoonest" : "newlyListed",
@@ -89,6 +90,9 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
 
     const verdict = evaluateListing(item, monitor);
     if (!verdict.passed) continue;
+
+    const dealPrice = listingEffectivePrice(item);
+    if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) continue;
 
     const created = await persistNewDeal(monitor, item);
     if (created) newDeals += 1;

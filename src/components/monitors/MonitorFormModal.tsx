@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { CRON_PRESETS } from "@/lib/format-ui";
+import { ACCESSORY_JUNK_KEYWORDS, mergeKeywordInput } from "@/lib/negative-presets";
 import type { BuyingType, Monitor } from "@/lib/types";
 
 export interface MonitorFormValues {
   name: string;
   query: string;
   categoryId: string;
+  minPrice: string;
   maxPrice: string;
   buyingType: BuyingType;
   maxRemainingHours: string;
@@ -24,6 +26,7 @@ export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
     name: monitor?.name ?? "",
     query: monitor?.query ?? "",
     categoryId: monitor?.categoryId ?? "",
+    minPrice: monitor?.minPrice != null ? String(monitor.minPrice) : "",
     maxPrice: monitor ? String(monitor.maxPrice) : "",
     buyingType: monitor?.buyingType ?? "ALL",
     maxRemainingHours: monitor?.maxRemainingHours != null ? String(monitor.maxRemainingHours) : "",
@@ -70,6 +73,7 @@ export function MonitorFormModal({
       name: values.name.trim(),
       query: values.query.trim(),
       categoryId: values.categoryId.trim() || null,
+      minPrice: values.minPrice.trim() ? Number(values.minPrice) : null,
       maxPrice: Number(values.maxPrice),
       buyingType: values.buyingType,
       maxRemainingHours: values.maxRemainingHours ? Number(values.maxRemainingHours) : null,
@@ -86,7 +90,7 @@ export function MonitorFormModal({
       open={open}
       onClose={onClose}
       title={editing ? "Edit monitor" : "Create monitor"}
-      description="Define the eBay search, price cap, and filters BayRadar should watch."
+      description="Define the eBay search, price range, and filters BayRadar should watch."
     >
       <form className="grid gap-4" onSubmit={handleSubmit}>
         <Field label="Monitor name" error={errors.name}>
@@ -103,15 +107,25 @@ export function MonitorFormModal({
             placeholder="PS5 Digital Edition"
           />
         </Field>
+        <Field label="Category ID (optional)">
+          <Input
+            value={values.categoryId}
+            onChange={(event) => update("categoryId", event.target.value)}
+            placeholder="139973"
+          />
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Category ID (optional)">
+          <Field label="Min Price (€)" error={errors.minPrice}>
             <Input
-              value={values.categoryId}
-              onChange={(event) => update("categoryId", event.target.value)}
-              placeholder="139973"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={values.minPrice}
+              onChange={(event) => update("minPrice", event.target.value)}
+              placeholder="e.g. 150"
             />
           </Field>
-          <Field label="Max target price (€)" error={errors.maxPrice}>
+          <Field label="Max Price (€)" error={errors.maxPrice}>
             <Input
               type="number"
               min="0.01"
@@ -142,6 +156,13 @@ export function MonitorFormModal({
           </Field>
         </div>
         <Field label="Negative keywords" error={errors.negativeKeywords}>
+          <button
+            type="button"
+            onClick={() => update("negativeKeywords", mergeKeywordInput(values.negativeKeywords, ACCESSORY_JUNK_KEYWORDS))}
+            className="mb-1 inline-flex w-fit items-center rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-400/15"
+          >
+            + Exclude Accessories &amp; Junk (DE/EN)
+          </button>
           <Input
             value={values.negativeKeywords}
             onChange={(event) => update("negativeKeywords", event.target.value)}
@@ -198,6 +219,14 @@ function validate(values: MonitorFormValues): Record<string, string> {
   const price = Number(values.maxPrice);
   if (!values.maxPrice || !Number.isFinite(price) || price <= 0) {
     errors.maxPrice = "Enter a price greater than 0.";
+  }
+  if (values.minPrice.trim()) {
+    const minPrice = Number(values.minPrice);
+    if (!Number.isFinite(minPrice) || minPrice <= 0) {
+      errors.minPrice = "Enter a price greater than 0.";
+    } else if (!errors.maxPrice && minPrice >= price) {
+      errors.minPrice = "Min price must be less than max price.";
+    }
   }
   if (values.maxRemainingHours) {
     const hours = Number(values.maxRemainingHours);

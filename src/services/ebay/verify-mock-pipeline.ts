@@ -19,7 +19,10 @@ interface CapturedAlert {
   body: string;
 }
 
-function filterMonitor(partial: Pick<Monitor, "maxPrice" | "buyingType" | "maxRemainingHours" | "negativeKeywords">): Monitor {
+function filterMonitor(
+  partial: Pick<Monitor, "maxPrice" | "buyingType" | "maxRemainingHours" | "negativeKeywords"> &
+    Partial<Pick<Monitor, "minPrice">>,
+): Monitor {
   return {
     id: "verify",
     name: "verify",
@@ -31,6 +34,7 @@ function filterMonitor(partial: Pick<Monitor, "maxPrice" | "buyingType" | "maxRe
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
+    minPrice: partial.minPrice ?? null,
   };
 }
 
@@ -182,6 +186,16 @@ function assertFilterMatrix(catalog: EbayItemSummary[], failures: string[]): voi
   assert(!evaluateListing(boxOnly, ps5Monitor).passed, "BOX ONLY is rejected by anti-scam keywords", failures);
   assert(!evaluateListing(defekt, ps5Monitor).passed, "Defekt / parts only is rejected", failures);
   assert(!evaluateListing(gbc, gbcMonitor).passed, "Game Boy Color @ €150 fails a €50 maxPrice", failures);
+
+  const floorMonitor = filterMonitor({
+    minPrice: 200,
+    maxPrice: 350,
+    buyingType: "ALL",
+    maxRemainingHours: null,
+    negativeKeywords: null,
+  });
+  assert(evaluateListing(genuine, floorMonitor).passed, "genuine PS5 @ €290 passes a €200 minPrice floor", failures);
+  assert(!evaluateListing(gbc, floorMonitor).passed, "Game Boy Color @ €150 fails a €200 minPrice floor", failures);
 }
 
 function assertSearchQueryIsolation(failures: string[]): void {

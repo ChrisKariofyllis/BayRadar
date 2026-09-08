@@ -22,8 +22,13 @@ export function evaluateListing(item: EbayItemSummary, monitor: Monitor): Listin
 
   if (price == null) {
     reasons.push("price is missing or invalid");
-  } else if (price > monitor.maxPrice) {
-    reasons.push(`price ${price} exceeds maxPrice ${monitor.maxPrice}`);
+  } else {
+    if (monitor.minPrice != null && price < monitor.minPrice) {
+      reasons.push(`price ${price} is below minPrice ${monitor.minPrice}`);
+    }
+    if (price > monitor.maxPrice) {
+      reasons.push(`price ${price} exceeds maxPrice ${monitor.maxPrice}`);
+    }
   }
 
   if (!matchesBuyingType(item, monitor.buyingType)) {

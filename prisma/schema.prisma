@@ -36,6 +36,7 @@ model Monitor {
   name               String
   query              String
   categoryId         String?
+  minPrice           Float?
   maxPrice           Float
   buyingType         BuyingType    @default(ALL)
   maxRemainingHours  Int?

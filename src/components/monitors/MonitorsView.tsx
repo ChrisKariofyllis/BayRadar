@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
-import { cronLabel, formatBuyingType, formatEuro, formatRelative, parseKeywords } from "@/lib/format-ui";
+import { cronLabel, formatBuyingType, formatMonitorPriceRange, formatRelative, parseKeywords } from "@/lib/format-ui";
 import type { Monitor } from "@/lib/types";
 import { NEW_MONITOR_EVENT } from "@/lib/ui-events";
 
@@ -158,7 +158,7 @@ export function MonitorsView() {
                       </div>
                     </td>
                     <td className="px-5 py-5 font-medium tabular-nums text-zinc-100">
-                      {formatEuro(monitor.maxPrice)}
+                      {formatMonitorPriceRange(monitor.minPrice, monitor.maxPrice)}
                     </td>
                     <td className="px-5 py-5">
                       <div className="flex items-center gap-3">
@@ -208,7 +208,9 @@ export function MonitorsView() {
                   />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1">
-                  <Capsule className="tabular-nums">{formatEuro(monitor.maxPrice)}</Capsule>
+                  <Capsule className="tabular-nums font-medium">
+                    {formatMonitorPriceRange(monitor.minPrice, monitor.maxPrice)}
+                  </Capsule>
                   <Capsule>{formatBuyingType(monitor.buyingType)}</Capsule>
                   {monitor.maxRemainingHours ? <Capsule>{monitor.maxRemainingHours}h</Capsule> : null}
                   {parseKeywords(monitor.negativeKeywords).map((keyword) => (

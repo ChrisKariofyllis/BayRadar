@@ -7,8 +7,23 @@ export const CRON_PRESETS = [
   { value: "0 * * * *", label: "Every hour" },
 ] as const;
 
+export function formatEuroAmount(price: number): string {
+  return price.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function formatEuro(price: number, currency = "EUR"): string {
-  return `${price.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  return `${formatEuroAmount(price)} ${currency}`;
+}
+
+export function formatMonitorPriceRange(
+  minPrice: number | null | undefined,
+  maxPrice: number,
+  currency = "EUR",
+): string {
+  if (minPrice != null) {
+    return `${formatEuroAmount(minPrice)} – ${formatEuroAmount(maxPrice)} ${currency}`;
+  }
+  return `≤ ${formatEuro(maxPrice, currency)}`;
 }
 
 export function formatBuyingType(type: BuyingType | string): string {

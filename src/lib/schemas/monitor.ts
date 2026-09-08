@@ -14,23 +14,36 @@ const cronScheduleSchema = z
   .min(1)
   .refine((value) => validateCron(value), { message: "Invalid cron expression" });
 
-export const createMonitorSchema = z.object({
-  name: z.string().trim().min(1, "name is required"),
-  query: z.string().trim().min(1, "query is required"),
-  categoryId: z.string().trim().min(1).nullable().optional(),
-  maxPrice: z.coerce.number().positive("maxPrice must be greater than 0"),
-  buyingType: buyingTypeSchema.optional().default("ALL"),
-  maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
-  negativeKeywords: negativeKeywordsSchema,
-  cronSchedule: cronScheduleSchema.optional().default("*/15 * * * *"),
-  isActive: z.boolean().optional().default(true),
-});
+const optionalMinPriceSchema = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  return value;
+}, z.union([z.null(), z.coerce.number().positive("minPrice must be greater than 0")]).optional());
+
+export const createMonitorSchema = z
+  .object({
+    name: z.string().trim().min(1, "name is required"),
+    query: z.string().trim().min(1, "query is required"),
+    categoryId: z.string().trim().min(1).nullable().optional(),
+    minPrice: optionalMinPriceSchema,
+    maxPrice: z.coerce.number().positive("maxPrice must be greater than 0"),
+    buyingType: buyingTypeSchema.optional().default("ALL"),
+    maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
+    negativeKeywords: negativeKeywordsSchema,
+    cronSchedule: cronScheduleSchema.optional().default("*/15 * * * *"),
+    isActive: z.boolean().optional().default(true),
+  })
+  .refine((value) => value.minPrice == null || value.minPrice < value.maxPrice, {
+    message: "minPrice must be less than maxPrice",
+    path: ["minPrice"],
+  });
 
 export const updateMonitorSchema = z
   .object({
     name: z.string().trim().min(1).optional(),
     query: z.string().trim().min(1).optional(),
     categoryId: z.string().trim().min(1).nullable().optional(),
+    minPrice: optionalMinPriceSchema,
     maxPrice: z.coerce.number().positive().optional(),
     buyingType: buyingTypeSchema.optional(),
     maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
@@ -40,6 +53,10 @@ export const updateMonitorSchema = z
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {
     message: "At least one field is required",
+  })
+  .refine((value) => value.minPrice == null || value.maxPrice == null || value.maxPrice === undefined || value.minPrice < value.maxPrice, {
+    message: "minPrice must be less than maxPrice",
+    path: ["minPrice"],
   });
 
 export type CreateMonitorInput = z.infer<typeof createMonitorSchema>;
