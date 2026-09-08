@@ -11,9 +11,11 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
 import type { Monitor, SeenListing } from "@/lib/types";
+import { isScanRunning, useScanProgress } from "@/lib/use-scan-progress";
 
 export function FeedView() {
   const { push } = useToast();
+  const scan = useScanProgress();
   const [listings, setListings] = useState<SeenListing[]>([]);
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,25 @@ export function FeedView() {
       })
       .finally(() => setLoading(false));
   }, [monitorId, format, debouncedQuery, push]);
+
+  useEffect(() => {
+    if (scan.status === "idle") return;
+    const params = new URLSearchParams();
+    if (monitorId) params.set("monitorId", monitorId);
+    if (format) params.set("format", format);
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+
+    const refresh = () => {
+      api<{ listings: SeenListing[] }>(`/api/feed?${params.toString()}`)
+        .then((data) => setListings(data.listings))
+        .catch(() => undefined);
+    };
+
+    refresh();
+    if (!isScanRunning(scan)) return;
+    const interval = window.setInterval(refresh, 2500);
+    return () => window.clearInterval(interval);
+  }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt]);
 
   const empty = useMemo(() => !loading && listings.length === 0, [loading, listings.length]);
 

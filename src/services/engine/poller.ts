@@ -7,6 +7,14 @@ import { getEbayRuntimeConfig } from "@/services/config";
 import { ebayClient } from "@/services/ebay/client";
 import type { EbayItemSummary } from "@/services/ebay/types";
 import { evaluateListing, listingEffectivePrice } from "@/services/filter";
+import {
+  addScanListings,
+  beginScanProgress,
+  failScanProgress,
+  finishScanProgress,
+  incrementScanInspected,
+  markScanFetching,
+} from "@/services/engine/scan-progress";
 import { dispatchDealNotification } from "@/services/notifications";
 
 export interface PollCycleOptions {
@@ -43,48 +51,59 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
   const errors: PollCycleError[] = [];
   let newDealsFound = 0;
 
-  const monitors = await prisma.monitor.findMany({
-    where: {
-      isActive: true,
-      ...(options.monitorId ? { id: options.monitorId } : {}),
-      ...(options.cronSchedule && !options.monitorId ? { cronSchedule: options.cronSchedule } : {}),
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (options.reset && monitors.length > 0) {
-    const cleared = await prisma.seenListing.deleteMany({
-      where: { monitorId: { in: monitors.map((monitor) => monitor.id) } },
+  try {
+    const monitors = await prisma.monitor.findMany({
+      where: {
+        isActive: true,
+        ...(options.monitorId ? { id: options.monitorId } : {}),
+        ...(options.cronSchedule && !options.monitorId ? { cronSchedule: options.cronSchedule } : {}),
+      },
+      orderBy: { createdAt: "asc" },
     });
-    console.log(`[poller] Reset cleared ${cleared.count} seen listing(s) before rescan`);
-  }
 
-  for (const monitor of monitors) {
-    try {
-      newDealsFound += await pollMonitor(monitor);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[poller] Monitor "${monitor.name}" (${monitor.id}) failed: ${message}`);
-      errors.push({ monitorId: monitor.id, monitorName: monitor.name, message });
+    beginScanProgress({ aiEnabled: monitors.some((monitor) => monitor.aiVerify) });
+
+    if (options.reset && monitors.length > 0) {
+      const cleared = await prisma.seenListing.deleteMany({
+        where: { monitorId: { in: monitors.map((monitor) => monitor.id) } },
+      });
+      console.log(`[poller] Reset cleared ${cleared.count} seen listing(s) before rescan`);
     }
+
+    for (const monitor of monitors) {
+      try {
+        newDealsFound += await pollMonitor(monitor);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[poller] Monitor "${monitor.name}" (${monitor.id}) failed: ${message}`);
+        errors.push({ monitorId: monitor.id, monitorName: monitor.name, message });
+      }
+    }
+
+    const summary: PollCycleSummary = {
+      totalMonitors: monitors.length,
+      newDealsFound,
+      errors,
+    };
+
+    finishScanProgress({ newDealsFound });
+
+    console.log(
+      `[poller] Cycle complete in ${Date.now() - startedAt}ms` +
+        `${options.cronSchedule ? ` (schedule=${options.cronSchedule})` : ""}: ` +
+        `${summary.totalMonitors} monitors, ${summary.newDealsFound} new deals, ${summary.errors.length} errors`,
+    );
+
+    return summary;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    failScanProgress(message);
+    throw error;
   }
-
-  const summary: PollCycleSummary = {
-    totalMonitors: monitors.length,
-    newDealsFound,
-    errors,
-  };
-
-  console.log(
-    `[poller] Cycle complete in ${Date.now() - startedAt}ms` +
-      `${options.cronSchedule ? ` (schedule=${options.cronSchedule})` : ""}: ` +
-      `${summary.totalMonitors} monitors, ${summary.newDealsFound} new deals, ${summary.errors.length} errors`,
-  );
-
-  return summary;
 }
 
 async function pollMonitor(monitor: Monitor): Promise<number> {
+  markScanFetching(monitor.name);
   const search = await ebayClient.searchItems({
     query: monitor.query,
     categoryId: monitor.categoryId,
@@ -95,20 +114,31 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   });
 
   const items = search.itemSummaries ?? [];
+  addScanListings(items.length);
   let newDeals = 0;
   const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
 
   for (const item of items) {
-    if (!item.itemId || !item.title) continue;
+    if (!item.itemId || !item.title) {
+      incrementScanInspected({ ai: monitor.aiVerify });
+      continue;
+    }
 
     const verdict = evaluateListing(item, monitor);
-    if (!verdict.passed) continue;
+    if (!verdict.passed) {
+      incrementScanInspected({ ai: monitor.aiVerify });
+      continue;
+    }
 
     const dealPrice = listingEffectivePrice(item);
-    if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) continue;
+    if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) {
+      incrementScanInspected({ ai: monitor.aiVerify });
+      continue;
+    }
 
     const created = await persistNewDeal(monitor, item, marketplaceId);
     if (created) newDeals += 1;
+    incrementScanInspected({ ai: monitor.aiVerify, newDeal: created });
   }
 
   await prisma.monitor.update({

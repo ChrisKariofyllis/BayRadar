@@ -54,6 +54,20 @@ export interface NotificationChannel {
   updatedAt: string;
 }
 
+export interface ScanProgress {
+  status: "idle" | "fetching" | "analyzing" | "complete" | "error";
+  label: string;
+  current: number;
+  total: number;
+  percent: number;
+  newDealsFound: number;
+  aiEnabled: boolean;
+  monitorName: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+  error: string | null;
+}
+
 export interface SystemStatus {
   ebay: {
     configured: boolean;

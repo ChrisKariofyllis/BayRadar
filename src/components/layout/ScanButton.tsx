@@ -6,26 +6,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
+import { isScanRunning, useScanProgress } from "@/lib/use-scan-progress";
 
 export function ScanButton({ compact = false }: { compact?: boolean }) {
   const { push } = useToast();
-  const [loading, setLoading] = useState(false);
+  const progress = useScanProgress();
+  const [starting, setStarting] = useState(false);
+  const loading = starting || isScanRunning(progress);
 
   async function triggerScan() {
-    setLoading(true);
+    if (loading) return;
+    setStarting(true);
     try {
-      const result = await api<{
-        totalMonitors: number;
-        newDealsFound: number;
-        errors: Array<{ message: string }>;
-      }>("/api/cron/poll", { method: "POST", body: JSON.stringify({ reset: true }) });
-
-      const extra = result.errors.length ? ` ${result.errors.length} error(s).` : "";
-      push({
-        tone: result.errors.length ? "info" : "success",
-        title: "Scan complete",
-        description: `${result.totalMonitors} monitors · ${result.newDealsFound} new deals.${extra}`,
-      });
+      await api("/api/cron/poll", { method: "POST", body: JSON.stringify({ reset: true }) });
     } catch (error) {
       push({
         tone: "error",
@@ -33,12 +26,12 @@ export function ScanButton({ compact = false }: { compact?: boolean }) {
         description: error instanceof ApiError ? error.message : "Could not start a poll cycle.",
       });
     } finally {
-      setLoading(false);
+      setStarting(false);
     }
   }
 
   return (
-    <Button onClick={triggerScan} loading={loading} variant="secondary" size="sm">
+    <Button onClick={() => void triggerScan()} loading={loading} variant="secondary" size="sm">
       <Radar className="h-4 w-4" />
       <span className="hidden sm:inline">{compact ? "Trigger Scan" : "Trigger Scan"}</span>
     </Button>
