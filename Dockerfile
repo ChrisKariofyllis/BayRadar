@@ -16,8 +16,8 @@ RUN for i in 1 2 3; do \
       sleep 2; \
     done \
   && test -d node_modules/next \
-  && rm -rf node_modules/@next/swc-linux-x64-musl node_modules/@img/sharp-linuxmusl-x64 \
-  && npx prisma generate
+  && rm -rf node_modules/@next/swc-linux-x64-musl node_modules/@img/sharp-linuxmusl-x64
+RUN npx prisma generate
 
 FROM node:20-slim AS builder
 WORKDIR /app
