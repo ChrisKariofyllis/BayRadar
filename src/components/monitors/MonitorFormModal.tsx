@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
+import { LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
+import { api, ApiError } from "@/lib/api-client";
 import { CRON_PRESETS } from "@/lib/format-ui";
 import { ACCESSORY_JUNK_KEYWORDS, mergeKeywordInput } from "@/lib/negative-presets";
 import type { BuyingType, Monitor } from "@/lib/types";
@@ -50,12 +54,26 @@ export function MonitorFormModal({
 }) {
   const [values, setValues] = useState<MonitorFormValues>(valuesFromMonitor(monitor));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [marketplaceId, setMarketplaceId] = useState("EBAY_DE");
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [showAiSetupHint, setShowAiSetupHint] = useState(false);
+  const { push } = useToast();
   const editing = Boolean(monitor);
 
   useEffect(() => {
     if (open) {
       setValues(valuesFromMonitor(monitor));
       setErrors({});
+      setShowAiSetupHint(false);
+      api<{ marketplaceId?: string }>("/api/settings/ebay")
+        .then((data) => setMarketplaceId(data.marketplaceId || "EBAY_DE"))
+        .catch(() => setMarketplaceId("EBAY_DE"));
+      api<{ configured: boolean }>("/api/settings/ai")
+        .then((data) => {
+          setAiConfigured(Boolean(data.configured));
+        })
+        .catch(() => setAiConfigured(null));
     }
   }, [open, monitor]);
 
@@ -83,6 +101,58 @@ export function MonitorFormModal({
         .filter(Boolean),
       cronSchedule: values.cronSchedule,
     });
+  }
+
+  async function suggestNegatives() {
+    if (!values.query.trim()) {
+      setErrors((current) => ({ ...current, query: "Enter a search query before generating exclusions." }));
+      return;
+    }
+
+    if (aiConfigured === false) {
+      setShowAiSetupHint(true);
+      return;
+    }
+
+    setSuggesting(true);
+    setShowAiSetupHint(false);
+    try {
+      const minPrice = values.minPrice.trim() ? Number(values.minPrice) : undefined;
+      const maxPrice = values.maxPrice.trim() ? Number(values.maxPrice) : undefined;
+      const result = await api<{ keywords: string[] }>("/api/ai/suggest-negatives", {
+        method: "POST",
+        body: JSON.stringify({
+          query: values.query.trim(),
+          marketplaceId,
+          minPrice: minPrice && Number.isFinite(minPrice) ? minPrice : undefined,
+          maxPrice: maxPrice && Number.isFinite(maxPrice) ? maxPrice : undefined,
+        }),
+      });
+      const keywords = result.keywords ?? [];
+      if (keywords.length === 0) {
+        push({ tone: "error", title: "No keywords returned", description: "Try a more specific search query." });
+        return;
+      }
+      setValues((current) => ({
+        ...current,
+        negativeKeywords: mergeKeywordInput(current.negativeKeywords, keywords),
+      }));
+      push({
+        tone: "success",
+        title: "AI exclusions added",
+        description: `Appended ${keywords.length} negative keyword${keywords.length === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Could not generate keywords.";
+      if (error instanceof ApiError && /not configured/i.test(message)) {
+        setAiConfigured(false);
+        setShowAiSetupHint(true);
+        return;
+      }
+      push({ tone: "error", title: "AI Smart Exclude failed", description: message });
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   return (
@@ -156,13 +226,33 @@ export function MonitorFormModal({
           </Field>
         </div>
         <Field label="Negative keywords" error={errors.negativeKeywords}>
-          <button
-            type="button"
-            onClick={() => update("negativeKeywords", mergeKeywordInput(values.negativeKeywords, ACCESSORY_JUNK_KEYWORDS))}
-            className="mb-1 inline-flex w-fit items-center rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-400/15"
-          >
-            + Exclude Accessories &amp; Junk (DE/EN)
-          </button>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => update("negativeKeywords", mergeKeywordInput(values.negativeKeywords, ACCESSORY_JUNK_KEYWORDS))}
+              className="inline-flex w-fit items-center rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-400/15"
+            >
+              + Exclude Accessories &amp; Junk (DE/EN)
+            </button>
+            <button
+              type="button"
+              onClick={() => void suggestNegatives()}
+              disabled={suggesting}
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-400/10 px-2.5 py-1 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-400/15 disabled:opacity-60"
+            >
+              {suggesting ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              AI Smart Exclude
+            </button>
+          </div>
+          {showAiSetupHint ? (
+            <p className="text-xs text-zinc-400">
+              Add an AI provider in{" "}
+              <Link href="/settings" className="text-amber-300 underline-offset-2 hover:underline">
+                Settings
+              </Link>{" "}
+              to generate negative keywords.
+            </p>
+          ) : null}
           <Input
             value={values.negativeKeywords}
             onChange={(event) => update("negativeKeywords", event.target.value)}
