@@ -122,3 +122,13 @@ model SystemConfig {
 
   @@map("system_configs")
 }
+
+model AiSettings {
+  id        String   @id @default("default")
+  aiBaseUrl String   @default("https://api.openai.com/v1")
+  aiApiKey  String?
+  aiModel   String   @default("gpt-4o-mini")
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_settings")
+}
