@@ -18,7 +18,7 @@ export function ScanButton({ compact = false }: { compact?: boolean }) {
         totalMonitors: number;
         newDealsFound: number;
         errors: Array<{ message: string }>;
-      }>("/api/cron/poll", { method: "POST" });
+      }>("/api/cron/poll", { method: "POST", body: JSON.stringify({ reset: true }) });
 
       const extra = result.errors.length ? ` ${result.errors.length} error(s).` : "";
       push({

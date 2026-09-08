@@ -11,6 +11,8 @@ import { dispatchDealNotification } from "@/services/notifications";
 
 export interface PollCycleOptions {
   cronSchedule?: string;
+  reset?: boolean;
+  monitorId?: string;
 }
 
 export interface PollCycleError {
@@ -44,10 +46,18 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
   const monitors = await prisma.monitor.findMany({
     where: {
       isActive: true,
-      ...(options.cronSchedule ? { cronSchedule: options.cronSchedule } : {}),
+      ...(options.monitorId ? { id: options.monitorId } : {}),
+      ...(options.cronSchedule && !options.monitorId ? { cronSchedule: options.cronSchedule } : {}),
     },
     orderBy: { createdAt: "asc" },
   });
+
+  if (options.reset && monitors.length > 0) {
+    const cleared = await prisma.seenListing.deleteMany({
+      where: { monitorId: { in: monitors.map((monitor) => monitor.id) } },
+    });
+    console.log(`[poller] Reset cleared ${cleared.count} seen listing(s) before rescan`);
+  }
 
   for (const monitor of monitors) {
     try {
@@ -134,9 +144,10 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
       price,
       currency,
       marketplaceId,
+      buyingFormat: item.buyingOptions?.join(",") || "UNKNOWN",
     });
 
-    if (!gate.isGenuine) {
+    if (gate.isGenuine !== true) {
       console.log(`[ai-gatekeeper] ❌ Dropped junk listing: "${item.title}" | Reason: ${gate.reason}`);
       return false;
     }
@@ -179,6 +190,11 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
   }
 
   return true;
+}
+
+export async function clearSeenListings(monitorId?: string): Promise<number> {
+  const result = await prisma.seenListing.deleteMany(monitorId ? { where: { monitorId } } : undefined);
+  return result.count;
 }
 
 function toSeenListingInput(monitorId: string, item: EbayItemSummary) {

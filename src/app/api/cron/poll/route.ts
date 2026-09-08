@@ -20,11 +20,14 @@ async function handlePoll(request: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const options = await readPollOptions(request);
+
   try {
-    const summary = await executePollCycle();
+    const summary = await executePollCycle(options);
     return NextResponse.json({
       ok: true,
       mode: "serverless",
+      reset: Boolean(options.reset),
       ...summary,
     });
   } catch (error) {
@@ -32,6 +35,32 @@ async function handlePoll(request: Request) {
     console.error(`[cron/poll] Cycle failed: ${message}`);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
+}
+
+async function readPollOptions(request: Request): Promise<{ reset?: boolean; monitorId?: string }> {
+  const url = new URL(request.url);
+  let reset = parseTruthy(url.searchParams.get("reset"));
+  let monitorId = url.searchParams.get("monitorId")?.trim() || undefined;
+
+  if (request.method === "GET") {
+    return { reset, monitorId };
+  }
+
+  try {
+    const body = (await request.json()) as { reset?: unknown; monitorId?: unknown };
+    if (parseTruthy(body.reset)) reset = true;
+    if (typeof body.monitorId === "string" && body.monitorId.trim()) {
+      monitorId = body.monitorId.trim();
+    }
+  } catch {
+    // Manual scans may send an empty body.
+  }
+
+  return { reset, monitorId };
+}
+
+function parseTruthy(value: unknown): boolean {
+  return value === true || value === "true" || value === "1";
 }
 
 function isAuthorized(request: Request): boolean {
