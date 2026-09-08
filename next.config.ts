@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     webpackBuildWorker: false,
+    cpus: 1,
+    workerThreads: false,
   },
   serverExternalPackages: [
     "@libsql/client",
