@@ -7,6 +7,9 @@ export interface ScanProgress {
   total: number;
   percent: number;
   newDealsFound: number;
+  fetchedFromEbay: number;
+  passedAi: number;
+  aiRejected: number;
   aiEnabled: boolean;
   monitorName: string | null;
   startedAt: number | null;
@@ -40,6 +43,9 @@ export function beginScanProgress(options?: { aiEnabled?: boolean }) {
     total: 0,
     percent: 0,
     newDealsFound: 0,
+    fetchedFromEbay: 0,
+    passedAi: 0,
+    aiRejected: 0,
     aiEnabled: Boolean(options?.aiEnabled),
     monitorName: null,
     startedAt: Date.now(),
@@ -57,12 +63,13 @@ export function markScanFetching(monitorName?: string) {
 }
 
 export function addScanListings(count: number) {
-  if (count <= 0) return;
-  const total = state.total + count;
+  const fetchedFromEbay = state.fetchedFromEbay + Math.max(0, count);
+  const total = state.total + Math.max(0, count);
   publish({
+    fetchedFromEbay,
     total,
     percent: percent(state.current, total),
-    label: inspectLabel(state.current, total, state.aiEnabled),
+    label: inspectLabel(state.current, total, state.aiEnabled, fetchedFromEbay, state.passedAi),
   });
 }
 
@@ -77,15 +84,30 @@ export function incrementScanInspected(options?: { ai?: boolean; newDeal?: boole
     aiEnabled,
     newDealsFound,
     percent: percent(current, state.total),
-    label: inspectLabel(current, state.total, aiEnabled),
+    label: inspectLabel(current, state.total, aiEnabled, state.fetchedFromEbay, state.passedAi),
+  });
+}
+
+export function recordAiVerdict(passed: boolean) {
+  const passedAi = state.passedAi + (passed ? 1 : 0);
+  const aiRejected = state.aiRejected + (passed ? 0 : 1);
+  publish({
+    passedAi,
+    aiRejected,
+    aiEnabled: true,
+    status: "analyzing",
+    label: inspectLabel(state.current, state.total, true, state.fetchedFromEbay, passedAi),
   });
 }
 
 export function finishScanProgress(options?: { newDealsFound?: number }) {
   const newDealsFound = options?.newDealsFound ?? state.newDealsFound;
+  const summary = state.aiEnabled
+    ? `Complete · ${state.fetchedFromEbay} from eBay · ${state.passedAi} passed AI`
+    : `Complete · ${state.fetchedFromEbay} from eBay`;
   publish({
     status: "complete",
-    label: "Complete",
+    label: summary,
     current: Math.max(state.current, state.total),
     percent: 100,
     newDealsFound,
@@ -103,13 +125,19 @@ export function failScanProgress(message: string) {
   });
 }
 
-function inspectLabel(current: number, total: number, aiEnabled: boolean): string {
+function inspectLabel(
+  current: number,
+  total: number,
+  aiEnabled: boolean,
+  fetchedFromEbay: number,
+  passedAi: number,
+): string {
   const safeTotal = Math.max(total, current, 0);
   const pct = percent(current, safeTotal);
   if (aiEnabled) {
-    return `Evaluating deals with AI Gatekeeper: ${current} / ${safeTotal} (${pct}%)`;
+    return `Evaluating deals with AI Gatekeeper: ${current} / ${safeTotal} (${pct}%) · ${fetchedFromEbay} from eBay · ${passedAi} passed AI`;
   }
-  return `Inspecting listings: ${current} / ${safeTotal} (${pct}%)`;
+  return `Inspecting listings: ${current} / ${safeTotal} (${pct}%) · ${fetchedFromEbay} from eBay`;
 }
 
 function percent(current: number, total: number): number {
@@ -132,6 +160,9 @@ function idleProgress(): ScanProgress {
     total: 0,
     percent: 0,
     newDealsFound: 0,
+    fetchedFromEbay: 0,
+    passedAi: 0,
+    aiRejected: 0,
     aiEnabled: false,
     monitorName: null,
     startedAt: null,

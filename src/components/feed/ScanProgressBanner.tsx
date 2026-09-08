@@ -62,7 +62,9 @@ export function ScanProgressBanner() {
             <p className="text-sm font-medium text-zinc-50">{progress.label}</p>
             <p className="mt-0.5 text-xs text-zinc-400">
               {total > 0
-                ? `${current} / ${total} listings inspected`
+                ? `${current} / ${total} listings inspected · ${progress.fetchedFromEbay} from eBay${
+                    progress.aiEnabled ? ` · ${progress.passedAi} passed AI` : ""
+                  }`
                 : running
                   ? "Waiting for eBay search results…"
                   : "Scan finished"}

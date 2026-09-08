@@ -12,8 +12,10 @@ import {
   beginScanProgress,
   failScanProgress,
   finishScanProgress,
+  getScanProgress,
   incrementScanInspected,
   markScanFetching,
+  recordAiVerdict,
 } from "@/services/engine/scan-progress";
 import { dispatchDealNotification } from "@/services/notifications";
 
@@ -87,11 +89,13 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
     };
 
     finishScanProgress({ newDealsFound });
+    const progress = getScanProgress();
 
     console.log(
       `[poller] Cycle complete in ${Date.now() - startedAt}ms` +
         `${options.cronSchedule ? ` (schedule=${options.cronSchedule})` : ""}: ` +
-        `${summary.totalMonitors} monitors, ${summary.newDealsFound} new deals, ${summary.errors.length} errors`,
+        `${summary.totalMonitors} monitors, ${progress.fetchedFromEbay} from eBay, ` +
+        `${progress.passedAi} passed AI, ${summary.newDealsFound} new deals, ${summary.errors.length} errors`,
     );
 
     return summary;
@@ -114,8 +118,13 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   });
 
   const items = search.itemSummaries ?? [];
+  console.log(`[ebay] Query "${monitor.query}" returned ${items.length} raw listings from eBay API`);
+  if (items.length === 0) {
+    console.log(`[ebay] ⚠️ 0 listings returned by eBay API. Consider broadening query terms.`);
+  }
   addScanListings(items.length);
   let newDeals = 0;
+  let passedAi = 0;
   const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
 
   for (const item of items) {
@@ -136,10 +145,17 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
       continue;
     }
 
-    const created = await persistNewDeal(monitor, item, marketplaceId);
-    if (created) newDeals += 1;
-    incrementScanInspected({ ai: monitor.aiVerify, newDeal: created });
+    const result = await persistNewDeal(monitor, item, marketplaceId);
+    if (result.created) newDeals += 1;
+    if (result.aiOutcome === "passed") passedAi += 1;
+    incrementScanInspected({ ai: monitor.aiVerify, newDeal: result.created });
   }
+
+  console.log(
+    `[poller] "${monitor.name}": ${items.length} fetched from eBay` +
+      `${monitor.aiVerify ? `, ${passedAi} passed AI` : ""}` +
+      `, ${newDeals} saved`,
+  );
 
   await prisma.monitor.update({
     where: { id: monitor.id },
@@ -149,7 +165,11 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   return newDeals;
 }
 
-async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketplaceId: string): Promise<boolean> {
+async function persistNewDeal(
+  monitor: Monitor,
+  item: EbayItemSummary,
+  marketplaceId: string,
+): Promise<{ created: boolean; aiOutcome: "none" | "passed" | "rejected" }> {
   const existing = await prisma.seenListing.findUnique({
     where: {
       itemId_monitorId: {
@@ -160,7 +180,7 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
     select: { id: true },
   });
 
-  if (existing) return false;
+  if (existing) return { created: false, aiOutcome: "none" };
 
   let aiVerified = false;
   let aiVerificationReason: string | null = null;
@@ -178,10 +198,12 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
     });
 
     if (gate.isGenuine !== true) {
+      recordAiVerdict(false);
       console.log(`[ai-gatekeeper] ❌ Dropped junk listing: "${item.title}" | Reason: ${gate.reason}`);
-      return false;
+      return { created: false, aiOutcome: "rejected" };
     }
 
+    recordAiVerdict(true);
     aiVerified = true;
     aiVerificationReason = gate.reason;
   }
@@ -196,7 +218,7 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
     await prisma.seenListing.create({ data: record });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return false;
+      return { created: false, aiOutcome: monitor.aiVerify ? "passed" : "none" };
     }
     throw error;
   }
@@ -219,7 +241,7 @@ async function persistNewDeal(monitor: Monitor, item: EbayItemSummary, marketpla
     console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
   }
 
-  return true;
+  return { created: true, aiOutcome: monitor.aiVerify ? "passed" : "none" };
 }
 
 export async function clearSeenListings(monitorId?: string): Promise<number> {

@@ -61,6 +61,9 @@ export interface ScanProgress {
   total: number;
   percent: number;
   newDealsFound: number;
+  fetchedFromEbay: number;
+  passedAi: number;
+  aiRejected: number;
   aiEnabled: boolean;
   monitorName: string | null;
   startedAt: number | null;
