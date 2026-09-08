@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
 import { CRON_PRESETS } from "@/lib/format-ui";
@@ -23,6 +24,7 @@ export interface MonitorFormValues {
   maxRemainingHours: string;
   negativeKeywords: string;
   cronSchedule: string;
+  aiVerify: boolean;
 }
 
 export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
@@ -36,6 +38,7 @@ export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
     maxRemainingHours: monitor?.maxRemainingHours != null ? String(monitor.maxRemainingHours) : "",
     negativeKeywords: monitor ? parseKeywordsInput(monitor.negativeKeywords) : "",
     cronSchedule: monitor?.cronSchedule ?? "*/15 * * * *",
+    aiVerify: Boolean(monitor?.aiVerify),
   };
 }
 
@@ -100,6 +103,7 @@ export function MonitorFormModal({
         .map((item) => item.trim())
         .filter(Boolean),
       cronSchedule: values.cronSchedule,
+      aiVerify: aiConfigured === false ? false : values.aiVerify,
     });
   }
 
@@ -259,6 +263,43 @@ export function MonitorFormModal({
             placeholder="ovp, defekt, box only"
           />
         </Field>
+        <div
+          className="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4"
+          title={
+            aiConfigured === false
+              ? "Configure an AI provider in Settings to enable the title gatekeeper."
+              : undefined
+          }
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Label>AI Title Gatekeeper</Label>
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200">
+                <Sparkles className="h-3 w-3" />
+                AI
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              Uses AI to inspect every listing title before sending notifications to eliminate replacement screens, wrong
+              sub-models, and accessories.
+            </p>
+            {aiConfigured === false ? (
+              <p className="mt-2 text-xs text-zinc-500">
+                Enable this after adding a provider in{" "}
+                <Link href="/settings" className="text-amber-300 underline-offset-2 hover:underline">
+                  Settings
+                </Link>
+                .
+              </p>
+            ) : null}
+          </div>
+          <Switch
+            checked={values.aiVerify && aiConfigured !== false}
+            disabled={aiConfigured === false}
+            onCheckedChange={(aiVerify) => update("aiVerify", aiVerify)}
+            label="AI Title Gatekeeper"
+          />
+        </div>
         <Field label="Polling schedule">
           <Select value={values.cronSchedule} onChange={(event) => update("cronSchedule", event.target.value)}>
             {CRON_PRESETS.map((preset) => (
