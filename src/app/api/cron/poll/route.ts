@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
-import { executePollCycle } from "@/services/engine/poller";
+import { BACKGROUND_SEARCH_LIMIT, executePollCycle, MANUAL_SEARCH_LIMIT } from "@/services/engine/poller";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +23,10 @@ async function handlePoll(request: Request) {
   const options = await readPollOptions(request);
 
   try {
-    const summary = await executePollCycle(options);
+    const summary = await executePollCycle({
+      ...options,
+      searchLimit: options.searchLimit ?? (isSameOrigin(request) ? MANUAL_SEARCH_LIMIT : BACKGROUND_SEARCH_LIMIT),
+    });
     return NextResponse.json({
       ok: true,
       mode: "serverless",
@@ -37,7 +40,9 @@ async function handlePoll(request: Request) {
   }
 }
 
-async function readPollOptions(request: Request): Promise<{ reset?: boolean; monitorId?: string }> {
+async function readPollOptions(
+  request: Request,
+): Promise<{ reset?: boolean; monitorId?: string; searchLimit?: number }> {
   const url = new URL(request.url);
   let reset = parseTruthy(url.searchParams.get("reset"));
   let monitorId = url.searchParams.get("monitorId")?.trim() || undefined;
@@ -63,10 +68,13 @@ function parseTruthy(value: unknown): boolean {
   return value === true || value === "true" || value === "1";
 }
 
+function isSameOrigin(request: Request): boolean {
+  return request.headers.get("sec-fetch-site") === "same-origin";
+}
+
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
-  const site = request.headers.get("sec-fetch-site");
-  if (site === "same-origin") {
+  if (isSameOrigin(request)) {
     return true;
   }
 
