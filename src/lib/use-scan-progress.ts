@@ -20,6 +20,7 @@ const IDLE: ScanProgress = {
   startedAt: null,
   finishedAt: null,
   error: null,
+  errorType: null,
 };
 
 export function isScanRunning(progress: ScanProgress): boolean {

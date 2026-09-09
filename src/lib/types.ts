@@ -70,6 +70,7 @@ export interface ScanProgress {
   startedAt: number | null;
   finishedAt: number | null;
   error: string | null;
+  errorType: "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null;
 }
 
 export interface SystemStatus {

@@ -17,6 +17,7 @@ import {
   incrementScanInspectedBy,
   markScanAiBatch,
   markScanFetching,
+  markScanQuotaExhausted,
   recordAiVerdict,
 } from "@/services/engine/scan-progress";
 import { dispatchDealNotification } from "@/services/notifications";
@@ -186,6 +187,18 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
 
       for (const item of unseen) {
         const gate = aiResults.get(item.itemId);
+        if (gate?.errorType === "RATE_LIMIT" || gate?.reason === "QUOTA_EXHAUSTED") {
+          markScanQuotaExhausted();
+          const created = await persistSeenListing(monitor, item, {
+            status: "ACCEPTED",
+            aiVerified: false,
+            aiVerificationReason: "basic_filter_fallback",
+            notify: true,
+          });
+          if (created) newDeals += 1;
+          incrementScanInspected({ ai: true, newDeal: created });
+          continue;
+        }
         if (gate?.isGenuine === true) {
           const created = await persistSeenListing(monitor, item, {
             status: "ACCEPTED",

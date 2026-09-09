@@ -15,6 +15,7 @@ export interface ScanProgress {
   startedAt: number | null;
   finishedAt: number | null;
   error: string | null;
+  errorType: "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null;
 }
 
 type Listener = (progress: ScanProgress) => void;
@@ -51,6 +52,7 @@ export function beginScanProgress(options?: { aiEnabled?: boolean }) {
     startedAt: Date.now(),
     finishedAt: null,
     error: null,
+    errorType: null,
   });
 }
 
@@ -117,6 +119,18 @@ export function recordAiVerdict(passed: boolean) {
 
 export function finishScanProgress(options?: { newDealsFound?: number }) {
   const newDealsFound = options?.newDealsFound ?? state.newDealsFound;
+  if (state.errorType === "QUOTA_EXHAUSTED" || state.errorType === "RATE_LIMIT") {
+    publish({
+      status: "error",
+      label: "⚠️ AI Evaluation Paused: Daily quota reached on your AI provider. Falling back to basic filters.",
+      error: state.error || "AI provider quota (RPD/RPM) has been exceeded.",
+      current: Math.max(state.current, state.total),
+      percent: 100,
+      newDealsFound,
+      finishedAt: Date.now(),
+    });
+    return;
+  }
   const summary = state.aiEnabled
     ? `Complete · ${state.fetchedFromEbay} from eBay · ${state.passedAi} passed AI`
     : `Complete · ${state.fetchedFromEbay} from eBay`;
@@ -128,6 +142,16 @@ export function finishScanProgress(options?: { newDealsFound?: number }) {
     newDealsFound,
     finishedAt: Date.now(),
     error: null,
+  });
+}
+
+export function markScanQuotaExhausted() {
+  publish({
+    errorType: "QUOTA_EXHAUSTED",
+    error: "AI provider quota (RPD/RPM) has been exceeded.",
+    aiEnabled: true,
+    status: "analyzing",
+    label: "⚠️ AI Evaluation Paused: Daily quota reached on your AI provider. Falling back to basic filters.",
   });
 }
 
@@ -183,5 +207,6 @@ function idleProgress(): ScanProgress {
     startedAt: null,
     finishedAt: null,
     error: null,
+    errorType: null,
   };
 }
