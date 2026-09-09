@@ -23,6 +23,7 @@ export function FeedView() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [monitorId, setMonitorId] = useState("");
   const [format, setFormat] = useState("");
+  const [sort, setSort] = useState("newest");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
@@ -41,6 +42,7 @@ export function FeedView() {
     const params = new URLSearchParams();
     if (monitorId) params.set("monitorId", monitorId);
     if (format) params.set("format", format);
+    if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     setLoading(true);
     api<{ listings: SeenListing[] }>(`/api/feed?${params.toString()}`)
@@ -53,13 +55,14 @@ export function FeedView() {
         });
       })
       .finally(() => setLoading(false));
-  }, [monitorId, format, debouncedQuery, push]);
+  }, [monitorId, format, sort, debouncedQuery, push]);
 
   useEffect(() => {
     if (scan.status === "idle") return;
     const params = new URLSearchParams();
     if (monitorId) params.set("monitorId", monitorId);
     if (format) params.set("format", format);
+    if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
 
     const refresh = () => {
@@ -72,7 +75,7 @@ export function FeedView() {
     if (!isScanRunning(scan)) return;
     const interval = window.setInterval(refresh, 2500);
     return () => window.clearInterval(interval);
-  }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt]);
+  }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt, sort]);
 
   const empty = useMemo(() => !loading && listings.length === 0, [loading, listings.length]);
 
@@ -103,7 +106,7 @@ export function FeedView() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Deals Feed</h1>
-          <p className="mt-1 text-sm text-zinc-400">Matched listings saved from your monitors, newest first.</p>
+          <p className="mt-1 text-sm text-zinc-400">Matched listings saved from your monitors.</p>
         </div>
         <Button
           type="button"
@@ -117,7 +120,7 @@ export function FeedView() {
         </Button>
       </div>
 
-      <Card className="grid gap-3 p-4 md:grid-cols-3">
+      <Card className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
         <Select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} aria-label="Filter by monitor">
           <option value="">All monitors</option>
           {monitors.map((monitor) => (
@@ -130,6 +133,14 @@ export function FeedView() {
           <option value="">All formats</option>
           <option value="AUCTION">Auction</option>
           <option value="FIXED_PRICE">Buy It Now</option>
+        </Select>
+        <Select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort deals">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="ending_soon">Ending: Soonest first</option>
+          <option value="ending_late">Ending: Latest first</option>
         </Select>
         <Input
           value={query}
