@@ -14,8 +14,9 @@ export async function GET(_request: Request, context: RouteContext) {
   const monitor = await prisma.monitor.findUnique({
     where: { id },
     include: {
-      _count: { select: { seenListings: true } },
+      _count: { select: { seenListings: { where: { status: "ACCEPTED" } } } },
       seenListings: {
+        where: { status: "ACCEPTED" },
         orderBy: { createdAt: "desc" },
         take: 20,
       },
@@ -67,7 +68,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       where: { id },
       data: parsed.data,
       include: {
-        _count: { select: { seenListings: true } },
+        _count: { select: { seenListings: { where: { status: "ACCEPTED" } } } },
       },
     });
 

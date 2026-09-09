@@ -21,10 +21,14 @@ import {
 } from "@/services/engine/scan-progress";
 import { dispatchDealNotification } from "@/services/notifications";
 
+export const MANUAL_SEARCH_LIMIT = 100;
+export const BACKGROUND_SEARCH_LIMIT = 50;
+
 export interface PollCycleOptions {
   cronSchedule?: string;
   reset?: boolean;
   monitorId?: string;
+  searchLimit?: number;
 }
 
 export interface PollCycleError {
@@ -74,9 +78,11 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
       console.log(`[poller] Reset cleared ${cleared.count} seen listing(s) before rescan`);
     }
 
+    const searchLimit = resolveSearchLimit(options);
+
     for (const monitor of monitors) {
       try {
-        newDealsFound += await pollMonitor(monitor);
+        newDealsFound += await pollMonitor(monitor, searchLimit);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[poller] Monitor "${monitor.name}" (${monitor.id}) failed: ${message}`);
@@ -108,7 +114,7 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
   }
 }
 
-async function pollMonitor(monitor: Monitor): Promise<number> {
+async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<number> {
   markScanFetching(monitor.name);
   const search = await ebayClient.searchItems({
     query: monitor.query,
@@ -117,16 +123,18 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
     maxPrice: monitor.maxPrice,
     buyingType: monitor.buyingType,
     sort: monitor.buyingType === "AUCTION" ? "endingSoonest" : "newlyListed",
+    limit: searchLimit,
   });
 
   const items = search.itemSummaries ?? [];
-  console.log(`[ebay] Query "${monitor.query}" returned ${items.length} raw listings from eBay API`);
+  console.log(
+    `[ebay] Query "${monitor.query}" returned ${items.length} raw listings from eBay API (limit=${searchLimit})`,
+  );
   if (items.length === 0) {
     console.log(`[ebay] ⚠️ 0 listings returned by eBay API. Consider broadening query terms.`);
   }
   addScanListings(items.length);
 
-  const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
   const candidates: EbayItemSummary[] = [];
 
   for (const item of items) {
@@ -144,39 +152,54 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   let passedAi = 0;
 
   if (monitor.aiVerify) {
-    const batchItems: BatchItemCandidate[] = unseen.map((item) => ({
-      id: item.itemId,
-      title: item.title,
-      price: listingEffectivePrice(item) ?? 0,
-      currency: item.currentBidPrice?.currency ?? item.price?.currency ?? "EUR",
-    }));
+    if (unseen.length === 0) {
+      console.log(`[ai-gatekeeper] 0 new candidates for "${monitor.name}", skipping Gemini`);
+    } else {
+      const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
+      const batchItems: BatchItemCandidate[] = unseen.map((item) => ({
+        id: item.itemId,
+        title: item.title,
+        price: listingEffectivePrice(item) ?? 0,
+        currency: item.currentBidPrice?.currency ?? item.price?.currency ?? "EUR",
+      }));
 
-    const aiResults = await verifyListingsBatch(monitor.query, marketplaceId, batchItems, (chunkIndex, chunkCount) => {
-      markScanAiBatch(chunkIndex, chunkCount);
-    });
+      const aiResults = await verifyListingsBatch(monitor.query, marketplaceId, batchItems, (chunkIndex, chunkCount) => {
+        markScanAiBatch(chunkIndex, chunkCount);
+      });
 
-    for (const item of unseen) {
-      const gate = aiResults.get(item.itemId);
-      if (gate?.isGenuine === true) {
-        const created = await persistNewDeal(monitor, item, {
-          aiVerified: true,
-          aiVerificationReason: gate.reason,
-        });
-        if (created) newDeals += 1;
-        passedAi += 1;
-        recordAiVerdict(true);
-        incrementScanInspected({ ai: true, newDeal: created });
-      } else {
-        recordAiVerdict(false);
-        console.log(
-          `[ai-gatekeeper] ❌ REJECTED: "${item.title}" | Reason: ${gate?.reason ?? "ai_batch_error"}`,
-        );
-        incrementScanInspected({ ai: true });
+      for (const item of unseen) {
+        const gate = aiResults.get(item.itemId);
+        if (gate?.isGenuine === true) {
+          const created = await persistSeenListing(monitor, item, {
+            status: "ACCEPTED",
+            aiVerified: true,
+            aiVerificationReason: gate.reason,
+            notify: true,
+          });
+          if (created) newDeals += 1;
+          passedAi += 1;
+          recordAiVerdict(true);
+          incrementScanInspected({ ai: true, newDeal: created });
+        } else {
+          const reason = gate?.reason ?? "ai_batch_error";
+          await persistSeenListing(monitor, item, {
+            status: "REJECTED",
+            aiVerified: false,
+            aiVerificationReason: reason,
+            notify: false,
+          });
+          recordAiVerdict(false);
+          console.log(`[ai-gatekeeper] ❌ REJECTED: "${item.title}" | Reason: ${reason}`);
+          incrementScanInspected({ ai: true });
+        }
       }
     }
   } else {
     for (const item of unseen) {
-      const created = await persistNewDeal(monitor, item);
+      const created = await persistSeenListing(monitor, item, {
+        status: "ACCEPTED",
+        notify: true,
+      });
       if (created) newDeals += 1;
       incrementScanInspected({ newDeal: created });
     }
@@ -222,10 +245,23 @@ async function rejectAlreadySeen(monitorId: string, candidates: EbayItemSummary[
   return candidates.filter((item) => !seenIds.has(item.itemId));
 }
 
-async function persistNewDeal(
+function resolveSearchLimit(options: PollCycleOptions): number {
+  if (typeof options.searchLimit === "number" && Number.isFinite(options.searchLimit)) {
+    return Math.max(1, Math.floor(options.searchLimit));
+  }
+  if (options.reset || options.monitorId) return MANUAL_SEARCH_LIMIT;
+  return BACKGROUND_SEARCH_LIMIT;
+}
+
+async function persistSeenListing(
   monitor: Monitor,
   item: EbayItemSummary,
-  ai?: { aiVerified: boolean; aiVerificationReason: string | null },
+  options?: {
+    status?: "ACCEPTED" | "REJECTED";
+    aiVerified?: boolean;
+    aiVerificationReason?: string | null;
+    notify?: boolean;
+  },
 ): Promise<boolean> {
   const existing = await prisma.seenListing.findUnique({
     where: {
@@ -241,8 +277,9 @@ async function persistNewDeal(
 
   const record = {
     ...toSeenListingInput(monitor.id, item),
-    aiVerified: ai?.aiVerified ?? false,
-    aiVerificationReason: ai?.aiVerificationReason ?? null,
+    status: options?.status ?? "ACCEPTED",
+    aiVerified: options?.aiVerified ?? false,
+    aiVerificationReason: options?.aiVerificationReason ?? null,
   };
 
   try {
@@ -254,22 +291,24 @@ async function persistNewDeal(
     throw error;
   }
 
-  try {
-    await dispatchDealNotification({
-      itemId: item.itemId,
-      title: item.title,
-      price: record.price,
-      currency: record.currency,
-      buyingFormat: record.buyingFormat,
-      itemUrl: record.itemUrl,
-      imageUrl: record.imageUrl,
-      bidCount: record.bidCount,
-      endsAt: record.endsAt,
-      monitorName: monitor.name,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
+  if (options?.notify !== false && record.status === "ACCEPTED") {
+    try {
+      await dispatchDealNotification({
+        itemId: item.itemId,
+        title: item.title,
+        price: record.price,
+        currency: record.currency,
+        buyingFormat: record.buyingFormat,
+        itemUrl: record.itemUrl,
+        imageUrl: record.imageUrl,
+        bidCount: record.bidCount,
+        endsAt: record.endsAt,
+        monitorName: monitor.name,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
+    }
   }
 
   return true;

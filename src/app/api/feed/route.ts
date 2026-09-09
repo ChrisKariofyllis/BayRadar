@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim() || undefined;
   const limit = clampLimit(Number(searchParams.get("limit") ?? 80));
 
-  const where: Prisma.SeenListingWhereInput = {};
+  const where: Prisma.SeenListingWhereInput = { status: "ACCEPTED" };
   if (monitorId) where.monitorId = monitorId;
   if (q) where.title = { contains: q };
   if (format === "AUCTION" || format === "FIXED_PRICE") {

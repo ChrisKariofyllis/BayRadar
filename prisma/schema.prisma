@@ -21,6 +21,11 @@ enum NotificationProvider {
   EMAIL
 }
 
+enum SeenListingStatus {
+  ACCEPTED
+  REJECTED
+}
+
 enum SnipeStatus {
   PENDING
   SCHEDULED
@@ -71,6 +76,7 @@ model SeenListing {
   createdAt      DateTime    @default(now())
   aiVerified     Boolean     @default(false)
   aiVerificationReason String?
+  status         SeenListingStatus @default(ACCEPTED)
 
   monitor        Monitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
   snipeTask      SnipeTask?

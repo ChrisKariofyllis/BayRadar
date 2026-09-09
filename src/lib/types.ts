@@ -37,6 +37,7 @@ export interface SeenListing {
   createdAt: string;
   aiVerified: boolean;
   aiVerificationReason: string | null;
+  status: "ACCEPTED" | "REJECTED";
   monitor: { id: string; name: string };
 }
 

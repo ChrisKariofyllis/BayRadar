@@ -9,7 +9,7 @@ export async function GET() {
   const monitors = await prisma.monitor.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      _count: { select: { seenListings: true } },
+      _count: { select: { seenListings: { where: { status: "ACCEPTED" } } } },
     },
   });
 
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const monitor = await prisma.monitor.create({
       data: parsed.data,
       include: {
-        _count: { select: { seenListings: true } },
+        _count: { select: { seenListings: { where: { status: "ACCEPTED" } } } },
       },
     });
 
