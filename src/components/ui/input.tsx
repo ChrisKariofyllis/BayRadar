@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import type {
   InputHTMLAttributes,
   LabelHTMLAttributes,
@@ -29,8 +30,11 @@ export function FieldError({ message }: { message?: string }) {
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(fieldClass, className)} {...props}>
-      {children}
-    </select>
+    <div className="relative">
+      <select className={cn(fieldClass, "appearance-none pr-10", className)} {...props}>
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+    </div>
   );
 }
