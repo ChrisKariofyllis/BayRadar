@@ -51,7 +51,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY docker-entrypoint.sh docker-start.sh ./
-RUN chmod +x /app/docker-entrypoint.sh /app/docker-start.sh \
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh /app/docker-start.sh \
+  && chmod +x /app/docker-entrypoint.sh /app/docker-start.sh \
   && mkdir -p /app/prisma/data \
   && chown -R nextjs:nodejs /app/prisma/data
 
