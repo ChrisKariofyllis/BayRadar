@@ -338,7 +338,7 @@ function toSeenListingInput(monitorId: string, item: EbayItemSummary) {
     currency,
     buyingFormat: item.buyingOptions?.join(",") || "UNKNOWN",
     bidCount: item.bidCount ?? 0,
-    itemUrl: item.itemWebUrl,
+    itemUrl: item.itemWebUrl || `https://www.ebay.com/itm/${item.itemId}`,
     imageUrl: item.image?.imageUrl ?? null,
     sellerFeedback: Number.isFinite(feedback) ? feedback : null,
     endsAt: item.itemEndDate ? new Date(item.itemEndDate) : null,
