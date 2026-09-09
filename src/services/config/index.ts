@@ -1,5 +1,5 @@
 import { prisma } from "@/db/prisma";
-import { DEFAULT_AI_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
+import { DEFAULT_AI_BASE_URL, DEFAULT_AI_FALLBACK_MODEL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
 
 export async function getConfigValue(key: string): Promise<string | undefined> {
   const row = await prisma.systemConfig.findUnique({
@@ -54,11 +54,15 @@ export async function getAiRuntimeConfig() {
   const aiBaseUrl = row?.aiBaseUrl?.trim() || envBase || DEFAULT_AI_BASE_URL;
   const aiApiKey = row?.aiApiKey?.trim() || envKey || "";
   const aiModel = row?.aiModel?.trim() || envModel || DEFAULT_AI_MODEL;
+  const aiFallbackModel = row?.aiFallbackModel?.trim() || DEFAULT_AI_FALLBACK_MODEL;
+  const enableFallback = row?.enableFallback ?? true;
 
   return {
     aiBaseUrl,
     aiApiKey,
     aiModel,
+    aiFallbackModel,
+    enableFallback,
     configured: Boolean(aiApiKey) || isLocalAiEndpoint(aiBaseUrl),
   };
 }

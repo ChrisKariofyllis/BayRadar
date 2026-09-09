@@ -1,5 +1,5 @@
 import { BodyParseError, jsonError, jsonOk, jsonValidationError, readJsonBody } from "@/lib/api";
-import { DEFAULT_AI_BASE_URL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
+import { DEFAULT_AI_BASE_URL, DEFAULT_AI_FALLBACK_MODEL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
 import { aiSettingsSchema } from "@/lib/schemas/ai-settings";
 import { getAiRuntimeConfig } from "@/services/config";
 import { prisma } from "@/db/prisma";
@@ -13,6 +13,8 @@ export async function GET() {
     aiBaseUrl: config.aiBaseUrl || DEFAULT_AI_BASE_URL,
     aiApiKey: config.aiApiKey ? "••••••••" : "",
     aiModel: config.aiModel || DEFAULT_AI_MODEL,
+    aiFallbackModel: config.aiFallbackModel || DEFAULT_AI_FALLBACK_MODEL,
+    enableFallback: config.enableFallback,
     hasApiKey: Boolean(config.aiApiKey),
     configured: config.configured,
   });
@@ -36,11 +38,15 @@ export async function POST(request: Request) {
         aiBaseUrl: parsed.data.aiBaseUrl.replace(/\/+$/, ""),
         aiApiKey: nextKey || null,
         aiModel: parsed.data.aiModel,
+        aiFallbackModel: parsed.data.aiFallbackModel?.trim() || DEFAULT_AI_FALLBACK_MODEL,
+        enableFallback: parsed.data.enableFallback ?? true,
       },
       update: {
         aiBaseUrl: parsed.data.aiBaseUrl.replace(/\/+$/, ""),
         aiApiKey: nextKey || null,
         aiModel: parsed.data.aiModel,
+        aiFallbackModel: parsed.data.aiFallbackModel?.trim() || DEFAULT_AI_FALLBACK_MODEL,
+        enableFallback: parsed.data.enableFallback ?? true,
       },
     });
 
@@ -49,6 +55,8 @@ export async function POST(request: Request) {
       saved: true,
       aiBaseUrl: saved.aiBaseUrl,
       aiModel: saved.aiModel,
+      aiFallbackModel: saved.aiFallbackModel,
+      enableFallback: saved.enableFallback,
       hasApiKey: Boolean(saved.aiApiKey),
       configured: saved.configured,
     });

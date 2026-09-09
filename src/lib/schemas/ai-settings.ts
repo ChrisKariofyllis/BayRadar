@@ -8,6 +8,8 @@ export const aiSettingsSchema = z.object({
     .url("Enter a valid OpenAI-compatible base URL"),
   aiApiKey: z.string().optional().nullable(),
   aiModel: z.string().trim().min(1, "Model name is required"),
+  aiFallbackModel: z.string().trim().max(120).optional().nullable(),
+  enableFallback: z.boolean().optional(),
 });
 
 export const suggestNegativesSchema = z.object({

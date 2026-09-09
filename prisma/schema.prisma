@@ -133,11 +133,13 @@ model SystemConfig {
 }
 
 model AiSettings {
-  id        String   @id @default("default")
-  aiBaseUrl String   @default("https://api.openai.com/v1")
-  aiApiKey  String?
-  aiModel   String   @default("gpt-4o-mini")
-  updatedAt DateTime @updatedAt
+  id              String   @id @default("default")
+  aiBaseUrl       String   @default("https://api.openai.com/v1")
+  aiApiKey        String?
+  aiModel         String   @default("gpt-4o-mini")
+  aiFallbackModel String?  @default("gemini-3.1-flash-lite")
+  enableFallback  Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
 
   @@map("ai_settings")
 }
