@@ -24,6 +24,7 @@ export interface BatchItemCandidate {
 export interface VerificationResult {
   isGenuine: boolean;
   reason: string;
+  errorType?: "RATE_LIMIT";
 }
 
 export type BatchChunkProgressHandler = (chunkIndex: number, chunkCount: number) => void;
@@ -36,6 +37,11 @@ const BATCH_TIMEOUT_MS = 30_000;
 const FAIL_UNCONFIGURED: VerificationResult = { isGenuine: false, reason: "AI not configured" };
 const FAIL_EVALUATION: VerificationResult = { isGenuine: false, reason: "ai_evaluation_failed" };
 const FAIL_BATCH: VerificationResult = { isGenuine: false, reason: "ai_batch_error" };
+const FAIL_QUOTA: VerificationResult = {
+  isGenuine: false,
+  reason: "QUOTA_EXHAUSTED",
+  errorType: "RATE_LIMIT",
+};
 
 export async function verifyListingWithAi(params: GatekeeperParams): Promise<GatekeeperVerdict> {
   const results = await verifyListingsBatch(params.targetQuery, params.marketplaceId, [
@@ -96,6 +102,10 @@ async function verifyChunk(
     }
     return parsed;
   } catch (error) {
+    if (isQuotaError(error)) {
+      console.warn(`[ai-gatekeeper] Quota exhausted after fallback for ${chunk.length} item(s)`);
+      return failChunk(chunk, FAIL_QUOTA);
+    }
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[ai-gatekeeper] Batch chunk failed, rejecting ${chunk.length} item(s) (${message})`, error);
     return failChunk(chunk);
@@ -109,12 +119,31 @@ async function requestChunk(
   config: Awaited<ReturnType<typeof getAiRuntimeConfig>>,
 ): Promise<string> {
   try {
-    return await requestChunkOnce(targetQuery, marketplaceId, chunk, config);
+    return await requestChunkOnce(targetQuery, marketplaceId, chunk, config, config.aiModel);
   } catch (error) {
-    if (!isTooManyRequests(error)) throw error;
+    if (!isQuotaError(error)) throw error;
+
+    const fallback = config.aiFallbackModel?.trim();
+    if (config.enableFallback && fallback && fallback !== config.aiModel) {
+      console.warn(
+        `[ai-gatekeeper] ⚠️ Quota hit on ${config.aiModel}. Switching to fallback model: ${fallback}`,
+      );
+      try {
+        return await requestChunkOnce(targetQuery, marketplaceId, chunk, config, fallback);
+      } catch (fallbackError) {
+        if (isQuotaError(fallbackError)) throw new QuotaExhaustedError();
+        throw fallbackError;
+      }
+    }
+
     console.warn("[ai-gatekeeper] HTTP 429 TooManyRequests, waiting 3s and retrying chunk once");
     await new Promise((r) => setTimeout(r, RETRY_429_DELAY_MS));
-    return await requestChunkOnce(targetQuery, marketplaceId, chunk, config);
+    try {
+      return await requestChunkOnce(targetQuery, marketplaceId, chunk, config, config.aiModel);
+    } catch (retryError) {
+      if (isQuotaError(retryError)) throw new QuotaExhaustedError();
+      throw retryError;
+    }
   }
 }
 
@@ -123,6 +152,7 @@ async function requestChunkOnce(
   marketplaceId: string,
   chunk: BatchItemCandidate[],
   config: Awaited<ReturnType<typeof getAiRuntimeConfig>>,
+  model: string,
 ): Promise<string> {
   const endpoint = `${trimTrailingSlash(config.aiBaseUrl)}/chat/completions`;
   const headers: Record<string, string> = {
@@ -165,7 +195,7 @@ Return JSON ONLY formatted as:
     headers,
     signal: AbortSignal.timeout(BATCH_TIMEOUT_MS),
     body: JSON.stringify({
-      model: config.aiModel,
+      model,
       temperature: 0.1,
       max_tokens: Math.min(2000, 120 + chunk.length * 70),
       response_format: { type: "json_object" },
@@ -177,8 +207,8 @@ Return JSON ONLY formatted as:
   });
 
   const raw = await response.text();
-  if (response.status === 429) {
-    throw new ProviderHttpError(429, raw.slice(0, 180));
+  if (response.status === 429 || (!response.ok && isQuotaMessage(raw))) {
+    throw new ProviderHttpError(response.status, raw.slice(0, 180));
   }
   if (!response.ok) {
     throw new Error(`provider ${response.status}: ${raw.slice(0, 180)}`);
@@ -248,10 +278,13 @@ function extractResultRows(body: unknown): Array<{ id?: unknown; isGenuine?: unk
   return null;
 }
 
-function failChunk(chunk: BatchItemCandidate[]): Map<string, VerificationResult> {
+function failChunk(
+  chunk: BatchItemCandidate[],
+  verdict: VerificationResult = FAIL_BATCH,
+): Map<string, VerificationResult> {
   const results = new Map<string, VerificationResult>();
   for (const item of chunk) {
-    results.set(item.id, FAIL_BATCH);
+    results.set(item.id, verdict);
   }
   return results;
 }
@@ -277,8 +310,15 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
-function isTooManyRequests(error: unknown): boolean {
-  return error instanceof ProviderHttpError && error.status === 429;
+function isQuotaMessage(text: string): boolean {
+  return /resource.?exhausted|quota.?exceeded|too many requests|rate.?limit/i.test(text);
+}
+
+function isQuotaError(error: unknown): boolean {
+  if (error instanceof QuotaExhaustedError) return true;
+  if (error instanceof ProviderHttpError && (error.status === 429 || isQuotaMessage(error.message))) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return isQuotaMessage(message) || /\b429\b/.test(message);
 }
 
 function trimTrailingSlash(url: string): string {
@@ -292,5 +332,12 @@ class ProviderHttpError extends Error {
   ) {
     super(`provider ${status}: ${details}`);
     this.name = "ProviderHttpError";
+  }
+}
+
+class QuotaExhaustedError extends Error {
+  constructor() {
+    super("QUOTA_EXHAUSTED");
+    this.name = "QuotaExhaustedError";
   }
 }
