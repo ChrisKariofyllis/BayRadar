@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { Monitor } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
-import { verifyListingWithAi } from "@/lib/ai/gatekeeper";
+import { verifyListingsBatch, type BatchItemCandidate } from "@/lib/ai/gatekeeper";
 import { getEbayRuntimeConfig } from "@/services/config";
 import { ebayClient } from "@/services/ebay/client";
 import type { EbayItemSummary } from "@/services/ebay/types";
@@ -14,6 +14,8 @@ import {
   finishScanProgress,
   getScanProgress,
   incrementScanInspected,
+  incrementScanInspectedBy,
+  markScanAiBatch,
   markScanFetching,
   recordAiVerdict,
 } from "@/services/engine/scan-progress";
@@ -123,32 +125,61 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
     console.log(`[ebay] ⚠️ 0 listings returned by eBay API. Consider broadening query terms.`);
   }
   addScanListings(items.length);
-  let newDeals = 0;
-  let passedAi = 0;
+
   const marketplaceId = (await getEbayRuntimeConfig()).marketplaceId;
+  const candidates: EbayItemSummary[] = [];
 
   for (const item of items) {
-    if (!item.itemId || !item.title) {
+    if (!passesLocalFilters(item, monitor)) {
       incrementScanInspected({ ai: monitor.aiVerify });
       continue;
     }
+    candidates.push(item);
+  }
 
-    const verdict = evaluateListing(item, monitor);
-    if (!verdict.passed) {
-      incrementScanInspected({ ai: monitor.aiVerify });
-      continue;
+  const unseen = await rejectAlreadySeen(monitor.id, candidates);
+  incrementScanInspectedBy(candidates.length - unseen.length, { ai: monitor.aiVerify });
+
+  let newDeals = 0;
+  let passedAi = 0;
+
+  if (monitor.aiVerify) {
+    const batchItems: BatchItemCandidate[] = unseen.map((item) => ({
+      id: item.itemId,
+      title: item.title,
+      price: listingEffectivePrice(item) ?? 0,
+      currency: item.currentBidPrice?.currency ?? item.price?.currency ?? "EUR",
+    }));
+
+    const aiResults = await verifyListingsBatch(monitor.query, marketplaceId, batchItems, (chunkIndex, chunkCount) => {
+      markScanAiBatch(chunkIndex, chunkCount);
+    });
+
+    for (const item of unseen) {
+      const gate = aiResults.get(item.itemId);
+      if (gate?.isGenuine === true) {
+        const created = await persistNewDeal(monitor, item, {
+          aiVerified: true,
+          aiVerificationReason: gate.reason,
+        });
+        if (created) newDeals += 1;
+        passedAi += 1;
+        recordAiVerdict(true);
+        incrementScanInspected({ ai: true, newDeal: created });
+      } else {
+        recordAiVerdict(false);
+        console.log(
+          `[ai-gatekeeper] ❌ REJECTED: "${item.title}" | Reason: ${gate?.reason ?? "ai_batch_error"}`,
+        );
+        incrementScanInspected({ ai: true });
+      }
     }
-
-    const dealPrice = listingEffectivePrice(item);
-    if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) {
-      incrementScanInspected({ ai: monitor.aiVerify });
-      continue;
+  } else {
+    for (const item of unseen) {
+      const created = await persistNewDeal(monitor, item);
+      if (created) newDeals += 1;
+      incrementScanInspected({ newDeal: created });
     }
-
-    const result = await persistNewDeal(monitor, item, marketplaceId);
-    if (result.created) newDeals += 1;
-    if (result.aiOutcome === "passed") passedAi += 1;
-    incrementScanInspected({ ai: monitor.aiVerify, newDeal: result.created });
   }
 
   console.log(
@@ -165,11 +196,37 @@ async function pollMonitor(monitor: Monitor): Promise<number> {
   return newDeals;
 }
 
+function passesLocalFilters(item: EbayItemSummary, monitor: Monitor): boolean {
+  if (!item.itemId || !item.title) return false;
+
+  const verdict = evaluateListing(item, monitor);
+  if (!verdict.passed) return false;
+
+  const dealPrice = listingEffectivePrice(item);
+  if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) return false;
+
+  return true;
+}
+
+async function rejectAlreadySeen(monitorId: string, candidates: EbayItemSummary[]): Promise<EbayItemSummary[]> {
+  if (candidates.length === 0) return [];
+
+  const existing = await prisma.seenListing.findMany({
+    where: {
+      monitorId,
+      itemId: { in: candidates.map((item) => item.itemId) },
+    },
+    select: { itemId: true },
+  });
+  const seenIds = new Set(existing.map((row) => row.itemId));
+  return candidates.filter((item) => !seenIds.has(item.itemId));
+}
+
 async function persistNewDeal(
   monitor: Monitor,
   item: EbayItemSummary,
-  marketplaceId: string,
-): Promise<{ created: boolean; aiOutcome: "none" | "passed" | "rejected" }> {
+  ai?: { aiVerified: boolean; aiVerificationReason: string | null },
+): Promise<boolean> {
   const existing = await prisma.seenListing.findUnique({
     where: {
       itemId_monitorId: {
@@ -180,45 +237,19 @@ async function persistNewDeal(
     select: { id: true },
   });
 
-  if (existing) return { created: false, aiOutcome: "none" };
-
-  let aiVerified = false;
-  let aiVerificationReason: string | null = null;
-
-  if (monitor.aiVerify) {
-    const price = listingEffectivePrice(item) ?? 0;
-    const currency = item.currentBidPrice?.currency ?? item.price?.currency ?? "EUR";
-    const gate = await verifyListingWithAi({
-      targetQuery: monitor.query,
-      title: item.title,
-      price,
-      currency,
-      marketplaceId,
-      buyingFormat: item.buyingOptions?.join(",") || "UNKNOWN",
-    });
-
-    if (gate.isGenuine !== true) {
-      recordAiVerdict(false);
-      console.log(`[ai-gatekeeper] ❌ Dropped junk listing: "${item.title}" | Reason: ${gate.reason}`);
-      return { created: false, aiOutcome: "rejected" };
-    }
-
-    recordAiVerdict(true);
-    aiVerified = true;
-    aiVerificationReason = gate.reason;
-  }
+  if (existing) return false;
 
   const record = {
     ...toSeenListingInput(monitor.id, item),
-    aiVerified,
-    aiVerificationReason,
+    aiVerified: ai?.aiVerified ?? false,
+    aiVerificationReason: ai?.aiVerificationReason ?? null,
   };
 
   try {
     await prisma.seenListing.create({ data: record });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { created: false, aiOutcome: monitor.aiVerify ? "passed" : "none" };
+      return false;
     }
     throw error;
   }
@@ -241,7 +272,7 @@ async function persistNewDeal(
     console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
   }
 
-  return { created: true, aiOutcome: monitor.aiVerify ? "passed" : "none" };
+  return true;
 }
 
 export async function clearSeenListings(monitorId?: string): Promise<number> {
