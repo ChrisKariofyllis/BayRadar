@@ -1,11 +1,14 @@
 "use client";
 
-import { Clock3, ExternalLink, Gavel, ImageOff } from "lucide-react";
+import { Clock3, ExternalLink, Gavel, ImageOff, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { formatCountdown, formatDateTime, formatEuro, isAuctionFormat, listingFormatLabel } from "@/lib/format-ui";
 import type { SeenListing } from "@/lib/types";
+
+const BADGE_BASE =
+  "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium tracking-wide backdrop-blur-md";
 
 export function DealCard({ listing }: { listing: SeenListing }) {
   const auction = isAuctionFormat(listing.buyingFormat);
@@ -31,21 +34,22 @@ export function DealCard({ listing }: { listing: SeenListing }) {
             <ImageOff className="h-8 w-8" />
           </div>
         )}
-        <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full border border-white/15 bg-black/40 px-2 py-0.5 text-xs text-zinc-100 backdrop-blur-md">
-            {listingFormatLabel(listing.buyingFormat)}
-          </span>
-          {listing.aiVerified ? (
-            <span
-              title={listing.aiVerificationReason || "AI verified this listing as the genuine product"}
-              className="inline-flex items-center gap-1 rounded-full border border-violet-300/25 bg-violet-500/20 px-2 py-0.5 text-xs text-violet-100 backdrop-blur-md"
-            >
-              ✨ AI Verified
+        <div className="absolute inset-x-0 top-3 flex w-full items-center justify-between gap-2 px-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className={`${BADGE_BASE} border border-white/15 bg-black/40 text-zinc-100`}>
+              {listingFormatLabel(listing.buyingFormat)}
             </span>
-          ) : null}
-        </div>
-        <div className="absolute right-3 top-3">
-          <span className="rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-sm font-medium tabular-nums text-zinc-50 backdrop-blur-md">
+            {listing.aiVerified ? (
+              <span
+                title={listing.aiVerificationReason || "AI verified this listing as the genuine product"}
+                className={`${BADGE_BASE} border border-purple-400/35 bg-purple-950/40 text-purple-200 shadow-sm shadow-purple-950/50`}
+              >
+                <Sparkles className="size-3 shrink-0 text-purple-300" />
+                <span className="select-none">AI Verified</span>
+              </span>
+            ) : null}
+          </div>
+          <span className={`${BADGE_BASE} border border-white/15 bg-black/40 tabular-nums text-zinc-50`}>
             {formatEuro(listing.price, listing.currency)}
           </span>
         </div>
