@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
-[![Version](https://img.shields.io/badge/version-v1.0.0-orange)](./package.json)
+[![Version](https://img.shields.io/badge/version-v1.1.0-orange)](./package.json)
 
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
@@ -20,9 +20,11 @@ Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 
 - 🎯 **Targeted Monitoring** — Search queries, category constraints, min/max price, and buying formats (Auction vs. Buy It Now).
 - 🛡️ **Anti-Scam & Box Exclusion** — Automatic regex filters exclude empty boxes, defects, and scam patterns (`ovp`, `nur karton`, `box only`, `defekt`, `parts only`).
-- ✨ **AI Smart Exclude** — Optional OpenAI-compatible assistant (OpenAI, Groq, OpenRouter, Ollama) suggests marketplace-language negative keywords for parts, accessories, and conflicting models, with sanitizing so query words like `pro` never block legitimate listings.
-- 🛂 **AI Title Gatekeeper** — Optional per-monitor deep check of listing titles before alerts, dropping replacement parts, accessories, empty boxes, and wrong sub-models. Evaluates candidates in batches with 429 retries, then caches both accepts and rejects so the same eBay item is never sent to Gemini twice. Fail-closed on AI errors; understands German `mit OVP` vs empty packaging.
-- 📡 **Live Scan Progress** — Trigger Scan streams fetch and AI inspection progress in a frosted banner, then refreshes the feed.
+- ✨ **AI Smart Exclude** — Optional OpenAI-compatible assistant (Gemini, Groq, OpenAI, OpenRouter, Anthropic, Ollama) suggests marketplace-language negative keywords for parts, accessories, and conflicting models, with sanitizing so query words like `pro` never block legitimate listings.
+- 🛂 **AI Title Gatekeeper** — Optional per-monitor deep check of listing titles before alerts, dropping replacement parts, accessories, empty boxes, and wrong sub-models. Evaluates candidates in batches, retries on 429s, then switches to a configured fallback model if the primary quota is exhausted. Caches accepts, AI rejects, and local-filter rejects so the same eBay item is not re-scored. If both models are out of quota, the scan keeps going with basic filters and warns in the banner. Understands German `mit OVP` vs empty packaging.
+- 🎛️ **AI Provider Presets** — One-click base URL and model chips in Settings for Gemini, Groq, OpenAI, OpenRouter, and Anthropic (via OpenRouter), plus a toggleable fallback model for rate-limit / daily-quota exhaustion.
+- 📡 **Live Scan Progress** — Trigger Scan streams fetch and AI inspection progress in a frosted banner, then refreshes the feed. Manual scans sweep up to 100 listings; cron sweeps 50.
+- 📊 **Deals Feed Sorting** — Sort saved matches by newest, oldest, price, or auction end time. Listing photos open the eBay item.
 - 🧹 **Clear Feed** — One-click purge of saved deals when you want a clean rescan.
 - ⏱️ **Auction Time Windows** — Alert only on auctions entering their final hours (e.g. `<= 24h` remaining) to avoid bid inflation noise.
 - 📱 **Multi-Channel Push Alerts** — Native dispatchers for **Ntfy**, **Telegram**, **Discord**, and **Gotify** with direct eBay links and image previews.
@@ -68,8 +70,8 @@ You don't need active eBay API keys to start testing!
 3. Click **Test eBay Connection** to verify the local mock engine.
 4. Add a Ntfy channel or Discord Webhook in Settings and send a test notification.
 5. Create a Monitor (e.g., PlayStation 5 @ €350) and click **Trigger Scan Now**. The mock engine will simulate deals and filter out scam boxes automatically. A live banner shows listings inspected; **Clear Feed** empties saved deals if you want a clean run.
-6. Optionally open **Settings → AI Configuration**, add an OpenAI-compatible provider, then use **AI Smart Exclude** on a monitor to generate negative keywords.
-7. Enable **AI Title Gatekeeper** on a monitor to inspect titles before notifications. Verified deals show an **✨ AI Verified** chip on the feed.
+6. Optionally open **Settings → AI Configuration**, pick a provider chip (Gemini, Groq, OpenAI, OpenRouter, or Anthropic), paste an API key, and use **AI Smart Exclude** on a monitor to generate negative keywords. Leave **Enable Model Fallback** on so a lighter model can take over if the primary hits a 429.
+7. Enable **AI Title Gatekeeper** on a monitor to inspect titles before notifications. Verified deals show an **✨ AI Verified** chip on the feed. Sort the feed by price or ending time from the filter bar.
 
 ---
 
