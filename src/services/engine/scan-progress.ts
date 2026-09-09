@@ -74,7 +74,12 @@ export function addScanListings(count: number) {
 }
 
 export function incrementScanInspected(options?: { ai?: boolean; newDeal?: boolean }) {
-  const current = state.current + 1;
+  incrementScanInspectedBy(1, options);
+}
+
+export function incrementScanInspectedBy(count: number, options?: { ai?: boolean; newDeal?: boolean }) {
+  if (count <= 0) return;
+  const current = state.current + count;
   const aiEnabled = state.aiEnabled || Boolean(options?.ai);
   const newDealsFound = state.newDealsFound + (options?.newDeal ? 1 : 0);
   const status: ScanStage = aiEnabled ? "analyzing" : state.status === "fetching" ? "analyzing" : state.status;
@@ -85,6 +90,16 @@ export function incrementScanInspected(options?: { ai?: boolean; newDeal?: boole
     newDealsFound,
     percent: percent(current, state.total),
     label: inspectLabel(current, state.total, aiEnabled, state.fetchedFromEbay, state.passedAi),
+  });
+}
+
+export function markScanAiBatch(chunkIndex: number, chunkCount: number) {
+  const total = Math.max(state.total, state.current, 0);
+  const pct = percent(state.current, total);
+  publish({
+    status: "analyzing",
+    aiEnabled: true,
+    label: `Evaluating deals with AI Gatekeeper: batch ${chunkIndex} / ${chunkCount} (${pct}%) · ${state.fetchedFromEbay} from eBay · ${state.passedAi} passed AI`,
   });
 }
 
