@@ -138,7 +138,24 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
   const candidates: EbayItemSummary[] = [];
 
   for (const item of items) {
-    if (!passesLocalFilters(item, monitor)) {
+    if (!item.itemId || !item.title) {
+      incrementScanInspected({ ai: monitor.aiVerify });
+      continue;
+    }
+
+    const local = evaluateListing(item, monitor);
+    const dealPrice = listingEffectivePrice(item);
+    const belowMin = Boolean(monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice);
+    if (!local.passed || belowMin) {
+      const reason = belowMin
+        ? `price ${dealPrice} is below minPrice ${monitor.minPrice}`
+        : (local.reasons[0] ?? "local_filter");
+      await persistSeenListing(monitor, item, {
+        status: "REJECTED",
+        aiVerified: false,
+        aiVerificationReason: reason.slice(0, 80),
+        notify: false,
+      });
       incrementScanInspected({ ai: monitor.aiVerify });
       continue;
     }
@@ -217,18 +234,6 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
   });
 
   return newDeals;
-}
-
-function passesLocalFilters(item: EbayItemSummary, monitor: Monitor): boolean {
-  if (!item.itemId || !item.title) return false;
-
-  const verdict = evaluateListing(item, monitor);
-  if (!verdict.passed) return false;
-
-  const dealPrice = listingEffectivePrice(item);
-  if (monitor.minPrice && dealPrice != null && dealPrice < monitor.minPrice) return false;
-
-  return true;
 }
 
 async function rejectAlreadySeen(monitorId: string, candidates: EbayItemSummary[]): Promise<EbayItemSummary[]> {
