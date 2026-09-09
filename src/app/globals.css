@@ -42,14 +42,14 @@ body {
 .app-ambient-glow {
   background:
     radial-gradient(circle 800px at 50% -100px, rgba(245, 158, 11, 0.08), transparent 80%),
-    radial-gradient(circle 600px at 80% 90%, rgba(16, 185, 129, 0.04), transparent 70%);
+    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.14), transparent 70%);
 }
 
 .app-ambient-grid {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-size: 24px 24px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 55%, transparent 100%);
 }
 
 @keyframes radar-pulse {
