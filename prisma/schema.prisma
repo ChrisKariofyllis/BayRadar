@@ -53,6 +53,8 @@ model Monitor {
   negativeKeywords   String?       // JSON array string: "[\"ovp\", \"defekt\"]"
   cronSchedule       String        @default("*/15 * * * *")
   aiVerify           Boolean       @default(false)
+  telegramNotifications Boolean    @default(true)
+  targetMarketValue  Float?
   isActive           Boolean       @default(true)
   lastRunAt          DateTime?
   createdAt          DateTime      @default(now())
@@ -84,6 +86,12 @@ model SeenListing {
   aiVerified     Boolean     @default(false)
   aiVerificationReason String?
   status         SeenListingStatus @default(ACCEPTED)
+  estimatedFmv   Float?
+  discountPercent Float?
+  idealoBWarePrice Float?
+  idealoShopName   String?
+  idealoProductUrl String?
+  avgMarketPrice   Float?
 
   monitor        Monitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
   snipeTask      SnipeTask?
@@ -149,6 +157,8 @@ model AiSettings {
   aiModel         String   @default("gpt-4o-mini")
   aiFallbackModel String?  @default("gemini-3.1-flash-lite")
   enableFallback  Boolean  @default(true)
+  priceEstimatorEnabled Boolean @default(false)
+  minArbitrageDiscount  Int     @default(20)
   updatedAt       DateTime @updatedAt
 
   @@map("ai_settings")
