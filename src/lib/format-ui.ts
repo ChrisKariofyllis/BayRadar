@@ -15,6 +15,60 @@ export function formatEuro(price: number, currency = "EUR"): string {
   return `${formatEuroAmount(price)} ${currency}`;
 }
 
+export function listingEstimatedFmv(listing: { estimatedFmv?: number | null }): number | null {
+  const price = listing.estimatedFmv;
+  if (price == null || !Number.isFinite(price) || price <= 0) return null;
+  return price;
+}
+
+export function listingArbitrage(listing: {
+  arbitrage?: {
+    estimatedFmv: number;
+    discountPercent: number;
+    estimatedProfit: number;
+  } | null;
+}): { estimatedFmv: number; discountPercent: number; estimatedProfit: number } | null {
+  const arbitrage = listing.arbitrage;
+  if (!arbitrage) return null;
+  if (!Number.isFinite(arbitrage.estimatedFmv) || !Number.isFinite(arbitrage.discountPercent)) return null;
+  return arbitrage;
+}
+
+export interface ListingIdealoBenchmark {
+  bestBWarePrice: number;
+  shopName: string;
+  productUrl: string | null;
+  comparison: string;
+}
+
+export function listingIdealoBenchmark(listing: {
+  price: number;
+  shippingCost?: number | null;
+  idealoBWarePrice?: number | null;
+  idealoShopName?: string | null;
+  idealoProductUrl?: string | null;
+}): ListingIdealoBenchmark | null {
+  const price = listing.idealoBWarePrice;
+  const shopName = listing.idealoShopName?.trim() || "Idealo";
+  if (price == null || !Number.isFinite(price) || price <= 0) return null;
+
+  const ebayLanded = listing.price + (listing.shippingCost ?? 0);
+  const diff = Number((price - ebayLanded).toFixed(2));
+  let comparison = " (Same as Idealo B-Ware)";
+  if (diff >= 0.5) {
+    comparison = ` (€${formatEuroAmount(diff)} cheaper on eBay)`;
+  } else if (diff <= -0.5) {
+    comparison = ` (€${formatEuroAmount(Math.abs(diff))} more than Idealo B-Ware)`;
+  }
+
+  return {
+    bestBWarePrice: price,
+    shopName,
+    productUrl: listing.idealoProductUrl?.trim() || null,
+    comparison,
+  };
+}
+
 export function formatShipping(cost?: number | null, currency?: string | null): string {
   if (cost == null) return "Shipping not listed — check eBay";
   if (cost <= 0) return "Free shipping";

@@ -13,7 +13,9 @@ import {
   formatEuro,
   formatEuroAmount,
   isAuctionListing,
+  listingArbitrage,
   listingCardFormatLabel,
+  listingIdealoBenchmark,
   listingSnipeState,
 } from "@/lib/format-ui";
 import type { SeenListing } from "@/lib/types";
@@ -32,6 +34,8 @@ export function DealCard({
   const [countdown, setCountdown] = useState(formatCountdown(listing.endsAt));
   const snipe = listingSnipeState(listing);
   const canArm = auction && (!snipe || snipe.kind === "armed");
+  const arbitrage = listingArbitrage(listing);
+  const idealo = listingIdealoBenchmark(listing);
 
   useEffect(() => {
     if (!listing.endsAt) return;
@@ -76,6 +80,13 @@ export function DealCard({
               </span>
             ) : null}
             <SnipeStatusBadge listing={listing} />
+            {arbitrage ? (
+              <span
+                className={`${BADGE_BASE} border border-orange-400/40 bg-orange-950/50 text-orange-100 shadow-sm shadow-orange-950/40`}
+              >
+                🔥 {arbitrage.discountPercent}% Below Market
+              </span>
+            ) : null}
           </div>
           <span className={`${BADGE_BASE} border border-white/15 bg-black/40 tabular-nums text-zinc-50`}>
             {formatEuro(listing.price, listing.currency)}
@@ -98,6 +109,17 @@ export function DealCard({
         >
           {listing.title}
         </button>
+        {arbitrage ? (
+          <p className="text-xs font-medium text-orange-200">
+            🔥 {arbitrage.discountPercent}% Below Market (Est: €{formatEuroAmount(arbitrage.estimatedFmv)})
+          </p>
+        ) : null}
+        {idealo ? (
+          <p className="text-xs font-medium text-sky-200">
+            🏷️ Idealo B-Ware: €{formatEuroAmount(idealo.bestBWarePrice)} ({idealo.shopName})
+            {idealo.comparison}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
           {auction && listing.bidCount != null ? (
             <span className="inline-flex items-center gap-1">

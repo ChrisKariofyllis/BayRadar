@@ -17,7 +17,9 @@ import {
   formatShipping,
   isAuctionListing,
   listingActiveSnipe,
+  listingArbitrage,
   listingCardFormatLabel,
+  listingIdealoBenchmark,
   listingSnipeState,
 } from "@/lib/format-ui";
 import type { ListingSnipe, SeenListing } from "@/lib/types";
@@ -55,6 +57,8 @@ export function DealQuickView({
   const auction = active ? isAuctionListing(active) : false;
   const snipeState = active ? listingSnipeState(active) : null;
   const snipe = snipeState?.kind === "armed" ? snipeState : null;
+  const arbitrage = active ? listingArbitrage(active) : null;
+  const idealo = active ? listingIdealoBenchmark(active) : null;
 
   useEffect(() => {
     if (!active) return;
@@ -229,6 +233,36 @@ export function DealQuickView({
               <p className="text-sm text-zinc-400">
                 {formatShipping(active.shippingCost, active.shippingCurrency ?? active.currency)}
               </p>
+              {arbitrage ? (
+                <>
+                  <p className="pt-1 text-sm text-zinc-200">
+                    Estimated Fair Value: €{formatEuroAmount(arbitrage.estimatedFmv)}
+                  </p>
+                  <p className="text-sm text-orange-200">
+                    Potential Margin: €{formatEuroAmount(arbitrage.estimatedProfit)} ({arbitrage.discountPercent}% below market)
+                  </p>
+                </>
+              ) : null}
+              {idealo ? (
+                <div className="pt-1">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Idealo Market Check</p>
+                  <p className="text-sm text-sky-200">
+                    {idealo.productUrl ? (
+                      <a
+                        href={idealo.productUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline-offset-2 hover:underline"
+                      >
+                        🏷️ Idealo B-Ware: €{formatEuroAmount(idealo.bestBWarePrice)} ({idealo.shopName})
+                      </a>
+                    ) : (
+                      <>🏷️ Idealo B-Ware: €{formatEuroAmount(idealo.bestBWarePrice)} ({idealo.shopName})</>
+                    )}
+                    {idealo.comparison}
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-300">

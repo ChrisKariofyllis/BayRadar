@@ -3,6 +3,7 @@ import type { Prisma, SnipeStatus } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { jsonOk } from "@/lib/api";
 import { auctionHasEnded, isActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
+import { getEstimatorRuntimeConfig } from "@/services/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,24 +34,27 @@ export async function GET(request: Request) {
     ];
   }
 
-  const listings = await prisma.seenListing.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 500,
-    include: {
-      monitor: { select: { id: true, name: true, buyingType: true } },
-      snipeTask: {
-        select: {
-          id: true,
-          status: true,
-          maxBid: true,
-          provider: true,
-          providerSnipeId: true,
-          finalPrice: true,
+  const [listings, estimator] = await Promise.all([
+    prisma.seenListing.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: {
+        monitor: { select: { id: true, name: true, buyingType: true } },
+        snipeTask: {
+          select: {
+            id: true,
+            status: true,
+            maxBid: true,
+            provider: true,
+            providerSnipeId: true,
+            finalPrice: true,
+          },
         },
       },
-    },
-  });
+    }),
+    getEstimatorRuntimeConfig(),
+  ]);
 
   const [activeSnipeCount, endedSnipeCount] = await Promise.all([
     prisma.snipeTask.count({
@@ -73,7 +77,7 @@ export async function GET(request: Request) {
   ]);
 
   return jsonOk({
-    listings: sortListings(listings, sort).slice(0, limit).map(toFeedListing),
+    listings: sortListings(listings, sort).slice(0, limit).map((listing) => toFeedListing(listing, estimator.minDiscount)),
     activeSnipeCount,
     endedSnipeCount,
   });
@@ -89,6 +93,10 @@ const ENDED_SNIPE_STATUSES: SnipeStatus[] = ["WON", "SUCCESS", "OUTBID", "FAILED
 
 function toFeedListing<T extends {
   endsAt?: Date | string | null;
+  price: number;
+  shippingCost?: number | null;
+  estimatedFmv?: number | null;
+  discountPercent?: number | null;
   snipeTask?: {
     id: string;
     status: SnipeStatus;
@@ -97,15 +105,39 @@ function toFeedListing<T extends {
     providerSnipeId?: string | null;
     finalPrice?: number | null;
   } | null;
-}>(listing: T) {
+}>(listing: T, minDiscount: number) {
   const task = listing.snipeTask ?? null;
   const ended = auctionHasEnded(listing.endsAt);
   const active = Boolean(task && isActiveSnipe(task.status) && !ended);
   return {
     ...listing,
+    avgMarketPrice: null,
     snipeTask: task ? { ...task, active } : null,
     activeSnipe: active ? toActiveSnipe({ ...task!, active: true }) : null,
     snipeOutcome: toSnipeOutcome(task, ended),
+    arbitrage: toListingArbitrage(listing, minDiscount),
+  };
+}
+
+function toListingArbitrage(
+  listing: {
+    price: number;
+    shippingCost?: number | null;
+    estimatedFmv?: number | null;
+    discountPercent?: number | null;
+  },
+  minDiscount: number,
+) {
+  const fmv = listing.estimatedFmv;
+  const discount = listing.discountPercent;
+  const totalCost = listing.price + (listing.shippingCost ?? 0);
+  if (fmv == null || discount == null || !Number.isFinite(fmv) || !Number.isFinite(discount) || fmv <= 0) return null;
+  if (!(totalCost < fmv)) return null;
+  if (discount < minDiscount) return null;
+  return {
+    estimatedFmv: fmv,
+    discountPercent: Math.round(discount),
+    estimatedProfit: Number((fmv - listing.price - (listing.shippingCost ?? 0)).toFixed(2)),
   };
 }
 
