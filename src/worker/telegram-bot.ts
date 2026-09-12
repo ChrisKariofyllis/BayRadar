@@ -1,5 +1,13 @@
 import { prisma } from "@/db/prisma";
-import { armListingSnipe } from "@/lib/sniper/arm";
+import { armListingSnipe, findSnipeListing } from "@/lib/sniper/arm";
+import { getEstimatorRuntimeConfig } from "@/services/config";
+import {
+  escapeTelegramMarkdown,
+  formatCompactEuro,
+  formatCountdown,
+  formatTelegramRefreshHeader,
+} from "@/services/notifications/format";
+import { formatListingTelegram } from "@/services/notifications/providers/telegram";
 
 const GET_UPDATES_TIMEOUT_SEC = 25;
 const FETCH_TIMEOUT_MS = 35_000;
@@ -80,6 +88,7 @@ export async function startTelegramBotLoop(signal: AbortSignal): Promise<void> {
       if (!pollerActive) {
         const chatLabel = [...config.chatIds].join(",");
         console.log(`[telegram] Bot poller started (chatIds=${chatLabel})`);
+        console.log("[telegram] Listening for /load, /cancel, and snipe callbacks");
         pollerActive = true;
         loggedWaiting = false;
       }
@@ -158,6 +167,12 @@ async function handleCallbackQuery(config: TelegramBotConfig, query: TelegramCal
   }
 
   const data = query.data?.trim() ?? "";
+  if (data.startsWith("load_deals:")) {
+    const selection = data.slice("load_deals:".length).trim();
+    await answerCallbackQuery(config.token, query.id, "Loading deals…");
+    await sendLoadedDeals(config.token, chatId ?? fromId, selection);
+    return;
+  }
   if (data.startsWith("snipe_prompt:")) {
     const listingId = data.slice("snipe_prompt:".length).trim();
     if (!listingId) {
@@ -201,6 +216,7 @@ async function handleCallbackQuery(config: TelegramBotConfig, query: TelegramCal
     const bidLabel = formatBidAmount(parsed.maxBid);
     await answerCallbackQuery(config.token, query.id, `🎯 Armed for €${bidLabel}!`);
     await appendArmedLineToAlert(config.token, query.message, parsed.maxBid);
+    await sendArmedConfirmation(config.token, chatId ?? fromId, parsed.listingId, parsed.maxBid);
     return;
   }
 
@@ -219,6 +235,12 @@ async function handleMessage(config: TelegramBotConfig, message: TelegramMessage
 
   const text = message.text?.trim() ?? "";
   if (!text) return;
+
+  if (/^\/load(?:@\w+)?(?:\s|$)/i.test(text)) {
+    console.log("[telegram] /load command received");
+    await sendLoadMenu(config.token, chatId);
+    return;
+  }
 
   if (/^\/cancel(?:@\w+)?$/i.test(text)) {
     pendingCustomBids.delete(fromId);
@@ -258,11 +280,205 @@ async function handleMessage(config: TelegramBotConfig, message: TelegramMessage
   }
 
   pendingCustomBids.delete(fromId);
-  await telegramCall(config.token, "sendMessage", {
-    chat_id: chatId,
-    text: `✅ Gixen snipe successfully armed for €${formatBidAmount(parsedBid)}!`,
-    reply_to_message_id: message.message_id,
+  await sendArmedConfirmation(config.token, chatId, pending.listingId, parsedBid);
+}
+
+async function sendLoadMenu(token: string, chatId: number): Promise<void> {
+  const monitors = await prisma.monitor.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true },
   });
+
+  if (monitors.length === 0) {
+    await telegramCall(token, "sendMessage", {
+      chat_id: chatId,
+      text: "No active monitors.",
+    });
+    return;
+  }
+
+  const rows: Array<Array<{ text: string; callback_data: string }>> = [
+    [{ text: "📦 All Monitors", callback_data: "load_deals:all" }],
+  ];
+  for (const monitor of monitors) {
+    rows.push([
+      {
+        text: monitorMenuLabel(monitor.name),
+        callback_data: `load_deals:${monitor.id}`,
+      },
+    ]);
+  }
+
+  await telegramCall(token, "sendMessage", {
+    chat_id: chatId,
+    text: "Select monitors to load deals from:",
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
+async function sendLoadedDeals(token: string, chatId: number, selection: string): Promise<void> {
+  const monitorId = selection === "all" ? undefined : selection;
+  if (monitorId) {
+    const monitor = await prisma.monitor.findUnique({ where: { id: monitorId }, select: { id: true } });
+    if (!monitor) {
+      await telegramCall(token, "sendMessage", {
+        chat_id: chatId,
+        text: "No recent listings found for this monitor.",
+      });
+      return;
+    }
+  }
+
+  const listings = await prisma.seenListing.findMany({
+    where: {
+      status: "ACCEPTED",
+      ...(monitorId ? { monitorId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: {
+      id: true,
+      itemId: true,
+      title: true,
+      price: true,
+      currency: true,
+      buyingFormat: true,
+      bidCount: true,
+      itemUrl: true,
+      imageUrl: true,
+      endsAt: true,
+      estimatedFmv: true,
+      discountPercent: true,
+      idealoBWarePrice: true,
+      idealoShopName: true,
+      monitor: { select: { name: true, buyingType: true, maxPrice: true } },
+    },
+  });
+
+  if (listings.length === 0) {
+    await telegramCall(token, "sendMessage", {
+      chat_id: chatId,
+      text: "No recent listings found for this monitor.",
+    });
+    return;
+  }
+
+  await telegramCall(token, "sendMessage", {
+    chat_id: chatId,
+    text: formatTelegramRefreshHeader(),
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  });
+
+  const estimator = await getEstimatorRuntimeConfig();
+  for (const listing of listings) {
+    const isArbitrage =
+      listing.discountPercent != null &&
+      Number.isFinite(listing.discountPercent) &&
+      listing.discountPercent >= estimator.minDiscount;
+    const caption = formatListingTelegram({
+      itemId: listing.itemId,
+      listingId: listing.id,
+      title: listing.title,
+      price: listing.price,
+      currency: listing.currency,
+      buyingFormat: listing.buyingFormat,
+      buyingType: listing.monitor.buyingType,
+      itemUrl: listing.itemUrl,
+      imageUrl: listing.imageUrl,
+      bidCount: listing.bidCount,
+      endsAt: listing.endsAt,
+      monitorName: listing.monitor.name,
+      maxPrice: listing.monitor.maxPrice,
+      estimatedFmv: listing.estimatedFmv,
+      discountPercent: isArbitrage ? listing.discountPercent : null,
+      idealoBWarePrice: listing.idealoBWarePrice,
+      idealoShopName: listing.idealoShopName,
+    });
+    await sendTelegramCard(token, chatId, caption, listing.itemUrl, listing.imageUrl);
+  }
+}
+
+async function sendArmedConfirmation(
+  token: string,
+  chatId: number,
+  listingId: string,
+  maxBid: number,
+): Promise<void> {
+  const listing = await findSnipeListing(listingId);
+  const title = listing?.title ?? "Listing";
+  const itemUrl = listing?.itemUrl ?? "https://www.ebay.com";
+  const countdown = formatCountdown(listing?.endsAt);
+  const endsAt = listing?.endsAt ? new Date(listing.endsAt) : null;
+  const endsLabel =
+    endsAt && !Number.isNaN(endsAt.getTime())
+      ? endsAt.toLocaleString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+
+  const lines = [
+    "✅ *SNIPE ARMED WITH GIXEN*",
+    "",
+    escapeTelegramMarkdown(title),
+    `🎯 Max Bid: €${formatCompactEuro(maxBid)}`,
+  ];
+  if (endsLabel) {
+    lines.push(`⏱ Ends: ${escapeTelegramMarkdown(endsLabel)}${countdown ? ` (${escapeTelegramMarkdown(countdown)})` : ""}`);
+  } else if (countdown) {
+    lines.push(`⏱ Ends in: ${escapeTelegramMarkdown(countdown)}`);
+  }
+
+  await sendTelegramCard(token, chatId, lines.join("\n"), itemUrl, listing?.imageUrl);
+}
+
+async function sendTelegramCard(
+  token: string,
+  chatId: number,
+  text: string,
+  itemUrl: string,
+  imageUrl?: string | null,
+): Promise<void> {
+  const replyMarkup = {
+    inline_keyboard: [[{ text: "Open in eBay ↗", url: itemUrl }]],
+  };
+
+  if (imageUrl) {
+    try {
+      await telegramCall(token, "sendPhoto", {
+        chat_id: chatId,
+        photo: imageUrl,
+        caption: text.slice(0, 1024),
+        parse_mode: "Markdown",
+        reply_markup: replyMarkup,
+      });
+      return;
+    } catch {
+      // Fall through to a text card if the photo URL is rejected.
+    }
+  }
+
+  await telegramCall(token, "sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "Markdown",
+    disable_web_page_preview: false,
+    reply_markup: replyMarkup,
+  });
+}
+
+function monitorMenuLabel(name: string): string {
+  const lower = name.toLowerCase();
+  let emoji = "📡";
+  if (/iphone|pixel|galaxy|phone|handy/.test(lower)) emoji = "📱";
+  else if (/ps5|playstation|xbox|switch|game/.test(lower)) emoji = "🎮";
+  else if (/laptop|macbook|notebook/.test(lower)) emoji = "💻";
+  return `${emoji} ${name}`.slice(0, 64);
 }
 
 function parseSnipeCallback(data: string): { listingId: string; maxBid: number } | null {

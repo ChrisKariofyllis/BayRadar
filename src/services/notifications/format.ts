@@ -94,3 +94,24 @@ export function escapeTelegramMarkdown(text: string): string {
 export function oneLine(value: string, max = 120): string {
   return value.replace(/[\r\n]+/g, " ").trim().slice(0, max);
 }
+
+export function formatTelegramRefreshHeader(now = new Date()): string {
+  const time = now.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Berlin",
+  });
+  const date = now.toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Berlin",
+  });
+  return [
+    "⚡━━━━━━━━━━━━━━━━━━━━━━━━━━━━⚡",
+    "   📡  <b>B A Y R A D A R   R E F R E S H</b>",
+    `   🕒  ${time}   •   📅  ${date}`,
+    "⚡━━━━━━━━━━━━━━━━━━━━━━━━━━━━⚡",
+  ].join("\n");
+}

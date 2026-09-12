@@ -5,7 +5,8 @@ import { prisma } from "@/db/prisma";
 import { sendDiscordNotification } from "./providers/discord";
 import { sendGotifyNotification } from "./providers/gotify";
 import { sendNtfyNotification } from "./providers/ntfy";
-import { sendTelegramNotification } from "./providers/telegram";
+import { sendTelegramNotification, sendTelegramPlainText } from "./providers/telegram";
+import { formatTelegramRefreshHeader } from "./format";
 import type { DealPayload, NotificationResult } from "./types";
 
 export type { DealPayload, NotificationResult } from "./types";
@@ -94,4 +95,28 @@ function logResult(result: NotificationResult, setting?: NotificationSetting): v
     return;
   }
   console.error(`[notify] ${result.provider} (${label}) failed: ${result.error ?? "unknown error"}`);
+}
+
+export async function dispatchTelegramDealBatch(deals: DealPayload[]): Promise<void> {
+  const newListings = deals.filter((deal) => deal.telegramNotifications !== false);
+  if (newListings.length === 0) return;
+
+  const settings = await prisma.notificationSetting.findMany({
+    where: { provider: "TELEGRAM", isEnabled: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (settings.length === 0) return;
+
+  const header = formatTelegramRefreshHeader();
+  for (const setting of settings) {
+    const result = await sendTelegramPlainText(setting, header);
+    logResult(result, setting);
+  }
+
+  for (const deal of newListings) {
+    for (const setting of settings) {
+      const result = await sendTelegramNotification(setting, deal);
+      logResult(result, setting);
+    }
+  }
 }

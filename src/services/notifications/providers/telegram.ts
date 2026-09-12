@@ -25,7 +25,7 @@ export async function sendTelegramNotification(
     if (!token) throw new Error("Telegram authToken (bot token) is required.");
     if (!chatId) throw new Error("Telegram channel (chat_id) is required.");
 
-    const caption = buildTelegramCaption(deal);
+    const caption = formatListingTelegram(deal);
     const replyMarkup = {
       inline_keyboard: buildTelegramKeyboard(deal),
     };
@@ -131,7 +131,7 @@ function snipeCallback(listingId: string, maxBid: number): string {
   return `snipe:${listingId}:${rounded}`;
 }
 
-function buildTelegramCaption(deal: DealPayload): string {
+export function formatListingTelegram(deal: DealPayload): string {
   const countdown = formatCountdown(deal.endsAt);
   const lines = [
     `*${escapeTelegramMarkdown(deal.monitorName)}*`,
@@ -147,6 +147,53 @@ function buildTelegramCaption(deal: DealPayload): string {
   if (countdown) {
     lines.push(`⏱ Ends in: ${escapeTelegramMarkdown(countdown)}`);
   }
+  if (
+    deal.discountPercent != null &&
+    deal.estimatedFmv != null &&
+    Number.isFinite(deal.discountPercent) &&
+    Number.isFinite(deal.estimatedFmv) &&
+    deal.discountPercent > 0
+  ) {
+    lines.push(
+      `🔥 Arbitrage: ~${Math.round(deal.discountPercent)}% below market (Est: €${formatCompactEuro(deal.estimatedFmv)})`,
+    );
+  }
+  if (deal.idealoBWarePrice != null && Number.isFinite(deal.idealoBWarePrice)) {
+    const shop = deal.idealoShopName?.trim() || "Idealo";
+    lines.push(
+      `🏷️ Idealo Refurb: ~€${formatCompactEuro(deal.idealoBWarePrice)} (${escapeTelegramMarkdown(shop)})`,
+    );
+  }
 
   return lines.join("\n").slice(0, 1024);
+}
+
+export async function sendTelegramPlainText(
+  setting: {
+    authToken?: string | null;
+    channel?: string | null;
+  },
+  text: string,
+): Promise<NotificationResult> {
+  try {
+    const token = setting.authToken?.trim();
+    const chatId = setting.channel?.trim();
+    if (!token) throw new Error("Telegram authToken (bot token) is required.");
+    if (!chatId) throw new Error("Telegram channel (chat_id) is required.");
+
+    await fetchNotification(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+
+    return { success: true, provider: "TELEGRAM" };
+  } catch (error) {
+    return failedResult("TELEGRAM", error);
+  }
 }
