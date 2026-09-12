@@ -67,6 +67,27 @@ export async function getAiRuntimeConfig() {
   };
 }
 
+export async function getGixenRuntimeConfig() {
+  const row = await prisma.gixenSettings.findUnique({ where: { id: "default" } });
+  const username = row?.username?.trim() || process.env.GIXEN_USERNAME?.trim() || "";
+  const password = row?.password?.trim() || process.env.GIXEN_PASSWORD?.trim() || "";
+  const envEnabled = process.env.GIXEN_ENABLED?.trim().toLowerCase();
+  const enabledFromEnv = envEnabled === "true" || envEnabled === "1";
+  const enabled = row ? row.enabled : enabledFromEnv;
+
+  return {
+    username,
+    password,
+    enabled,
+    configured: Boolean(username && password),
+    handshakeOk: Boolean(row?.handshakeOk),
+    handshakeAt: row?.handshakeAt ?? null,
+    mirrorActive: Boolean(row?.mirrorActive),
+    sessionCookie: row?.sessionCookie?.trim() || "",
+    sessionId: row?.sessionId?.trim() || "",
+  };
+}
+
 export function isLocalAiEndpoint(baseUrl: string): boolean {
   try {
     const host = new URL(baseUrl).hostname;

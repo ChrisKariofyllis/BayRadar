@@ -26,6 +26,10 @@ enum SeenListingStatus {
   REJECTED
 }
 
+enum SnipeProvider {
+  GIXEN
+}
+
 enum SnipeStatus {
   PENDING
   SCHEDULED
@@ -88,18 +92,20 @@ model SeenListing {
 }
 
 model SnipeTask {
-  id             String      @id @default(cuid())
-  itemId         String
-  seenListingId  String?     @unique
-  monitorId      String?
-  maxBid         Float
-  currency       String      @default("EUR")
-  leadTimeSec    Int         @default(6) // Seconds before end time to fire bid
-  status         SnipeStatus @default(PENDING)
-  executionLog   String?
-  executeAt      DateTime    // Precalculated: endsAt - leadTimeSec
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id              String        @id @default(cuid())
+  itemId          String
+  seenListingId   String?       @unique
+  monitorId       String?
+  maxBid          Float
+  currency        String        @default("EUR")
+  leadTimeSec     Int           @default(6) // Seconds before end time to fire bid
+  provider        SnipeProvider @default(GIXEN)
+  providerSnipeId String?
+  status          SnipeStatus   @default(PENDING)
+  executionLog    String?
+  executeAt       DateTime      // Precalculated: endsAt - leadTimeSec
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   seenListing    SeenListing? @relation(fields: [seenListingId], references: [id], onDelete: SetNull)
   monitor        Monitor?     @relation(fields: [monitorId], references: [id], onDelete: SetNull)
@@ -142,4 +148,19 @@ model AiSettings {
   updatedAt       DateTime @updatedAt
 
   @@map("ai_settings")
+}
+
+model GixenSettings {
+  id             String    @id @default("default")
+  username       String    @default("")
+  password       String?
+  enabled        Boolean   @default(false)
+  handshakeOk    Boolean   @default(false)
+  handshakeAt    DateTime?
+  mirrorActive   Boolean   @default(false)
+  sessionCookie  String?
+  sessionId      String?
+  updatedAt      DateTime  @updatedAt
+
+  @@map("gixen_settings")
 }

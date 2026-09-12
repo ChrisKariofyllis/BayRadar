@@ -1,12 +1,16 @@
 import { jsonOk } from "@/lib/api";
-import { getAiRuntimeConfig, getEbayRuntimeConfig } from "@/services/config";
+import { getAiRuntimeConfig, getEbayRuntimeConfig, getGixenRuntimeConfig } from "@/services/config";
 import { resolveEbayMockDecision } from "@/services/ebay/mock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const [ebay, ai] = await Promise.all([getEbayRuntimeConfig(), getAiRuntimeConfig()]);
+  const [ebay, ai, gixen] = await Promise.all([
+    getEbayRuntimeConfig(),
+    getAiRuntimeConfig(),
+    getGixenRuntimeConfig(),
+  ]);
   const configuredMode = process.env.POLLER_MODE?.trim().toLowerCase();
   const mock = await resolveEbayMockDecision({
     hasCredentials: Boolean(ebay.appId && ebay.certId),
@@ -30,6 +34,12 @@ export async function GET() {
     poller: {
       mode: configuredMode === "worker" || configuredMode === "serverless" ? configuredMode : "hybrid",
       defaultCron: process.env.WORKER_DEFAULT_CRON?.trim() || "*/5 * * * *",
+    },
+    gixen: {
+      configured: gixen.configured,
+      enabled: gixen.enabled,
+      handshakeOk: gixen.handshakeOk,
+      mirrorActive: gixen.mirrorActive,
     },
   });
 }
