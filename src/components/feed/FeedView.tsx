@@ -11,7 +11,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
-import { listingActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
+import { listingSnipeState, toActiveSnipe } from "@/lib/format-ui";
 import type { ListingSnipe, Monitor, SeenListing } from "@/lib/types";
 import { isScanRunning, useScanProgress } from "@/lib/use-scan-progress";
 
@@ -30,8 +30,9 @@ export function FeedView() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusBid, setFocusBid] = useState(false);
-  const [view, setView] = useState<"all" | "snipes">("all");
+  const [view, setView] = useState<"all" | "snipes" | "ended">("all");
   const [snipeCount, setSnipeCount] = useState(0);
+  const [endedCount, setEndedCount] = useState(0);
 
   useEffect(() => {
     api<{ monitors: Monitor[] }>("/api/monitors")
@@ -51,11 +52,13 @@ export function FeedView() {
     if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     if (view === "snipes") params.set("snipes", "active");
+    if (view === "ended") params.set("snipes", "ended");
     setLoading(true);
-    api<{ listings: SeenListing[]; activeSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+    api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`)
       .then((data) => {
         setListings(data.listings);
         if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
+        if (typeof data.endedSnipeCount === "number") setEndedCount(data.endedSnipeCount);
       })
       .catch((error) => {
         push({
@@ -75,12 +78,14 @@ export function FeedView() {
     if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     if (view === "snipes") params.set("snipes", "active");
+    if (view === "ended") params.set("snipes", "ended");
 
     const refresh = () => {
-      api<{ listings: SeenListing[]; activeSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+      api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`)
         .then((data) => {
           setListings(data.listings);
           if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
+          if (typeof data.endedSnipeCount === "number") setEndedCount(data.endedSnipeCount);
         })
         .catch(() => undefined);
     };
@@ -91,10 +96,16 @@ export function FeedView() {
     return () => window.clearInterval(interval);
   }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt, sort, view]);
 
-  const visible = useMemo(
-    () => (view === "snipes" ? listings.filter((listing) => listingActiveSnipe(listing)) : listings),
-    [listings, view],
-  );
+  const visible = useMemo(() => {
+    if (view === "snipes") return listings.filter((listing) => listingSnipeState(listing)?.kind === "armed");
+    if (view === "ended") {
+      return listings.filter((listing) => {
+        const state = listingSnipeState(listing);
+        return Boolean(state && state.kind !== "armed");
+      });
+    }
+    return listings;
+  }, [listings, view]);
   const empty = useMemo(() => !loading && visible.length === 0, [loading, visible.length]);
   const selected = listings.find((listing) => listing.id === selectedId) ?? visible.find((listing) => listing.id === selectedId) ?? null;
 
@@ -111,7 +122,7 @@ export function FeedView() {
   function handleSnipeUpdated(listingId: string, snipe: ListingSnipe | null) {
     setListings((current) => {
       const previous = current.find((listing) => listing.id === listingId);
-      const wasActive = Boolean(previous && listingActiveSnipe(previous));
+      const wasActive = Boolean(previous && listingSnipeState(previous)?.kind === "armed");
       const nextActive = toActiveSnipe(snipe);
       if (wasActive !== Boolean(nextActive)) {
         setSnipeCount((count) => Math.max(0, count + (nextActive ? 1 : -1)));
@@ -194,6 +205,24 @@ export function FeedView() {
             {snipeCount}
           </span>
         </button>
+        <button
+          type="button"
+          onClick={() => setView("ended")}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors ${
+            view === "ended"
+              ? "bg-amber-400 text-zinc-950"
+              : "border border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
+          }`}
+        >
+          Ended Snipes
+          <span
+            className={`rounded-full px-1.5 text-xs tabular-nums ${
+              view === "ended" ? "bg-zinc-950/15" : "bg-white/10 text-zinc-200"
+            }`}
+          >
+            {endedCount}
+          </span>
+        </button>
       </div>
 
       <Card className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -231,7 +260,9 @@ export function FeedView() {
         <Card className="p-8 text-center text-sm text-zinc-400">
           {view === "snipes"
             ? "No active snipes scheduled yet."
-            : "No deals yet. Run a scan after creating an active monitor."}
+            : view === "ended"
+              ? "No ended snipes yet."
+              : "No deals yet. Run a scan after creating an active monitor."}
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { SnipeOutcomeBanner, SnipeStatusBadge } from "@/components/feed/SnipeStatusBadge";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
 import {
@@ -17,6 +18,7 @@ import {
   isAuctionListing,
   listingActiveSnipe,
   listingCardFormatLabel,
+  listingSnipeState,
 } from "@/lib/format-ui";
 import type { ListingSnipe, SeenListing } from "@/lib/types";
 
@@ -51,7 +53,8 @@ export function DealQuickView({
 
   const active = listing ?? cached;
   const auction = active ? isAuctionListing(active) : false;
-  const snipe = active ? listingActiveSnipe(active) : null;
+  const snipeState = active ? listingSnipeState(active) : null;
+  const snipe = snipeState?.kind === "armed" ? snipeState : null;
 
   useEffect(() => {
     if (!active) return;
@@ -187,6 +190,11 @@ export function DealQuickView({
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 {listingCardFormatLabel(active)}
               </p>
+              {snipeState && snipeState.kind !== "armed" ? (
+                <div className="mt-2">
+                  <SnipeStatusBadge listing={active} />
+                </div>
+              ) : null}
               <h2 id={titleId} className="mt-1 text-lg font-semibold leading-snug text-zinc-50">
                 {active.title}
               </h2>
@@ -241,67 +249,72 @@ export function DealQuickView({
           <div className="sticky bottom-0 space-y-3 border-t border-white/[0.08] bg-[#18181b] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {auction ? (
               <>
+                {snipeState && snipeState.kind !== "armed" ? <SnipeOutcomeBanner listing={active} /> : null}
                 {snipe ? (
                   <div className="rounded-xl border border-emerald-400/30 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100">
                     Active Snipe: €{formatEuroAmount(snipe.maxBid)}
                   </div>
                 ) : null}
-                <div className="grid gap-1.5">
-                  <Label htmlFor={`quick-max-bid-${active.id}`}>Max Bid (€)</Label>
-                  <Input
-                    ref={bidRef}
-                    id={`quick-max-bid-${active.id}`}
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={maxBid}
-                    onChange={(event) => setMaxBid(event.target.value)}
-                    placeholder="0.00"
-                    className="h-12 text-base"
-                  />
-                  <div className="flex gap-2">
-                    {INCREMENTS.map((amount) => (
+                {!snipeState || snipeState.kind === "armed" ? (
+                  <>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor={`quick-max-bid-${active.id}`}>Max Bid (€)</Label>
+                      <Input
+                        ref={bidRef}
+                        id={`quick-max-bid-${active.id}`}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={maxBid}
+                        onChange={(event) => setMaxBid(event.target.value)}
+                        placeholder="0.00"
+                        className="h-12 text-base"
+                      />
+                      <div className="flex gap-2">
+                        {INCREMENTS.map((amount) => (
+                          <Button
+                            key={amount}
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => bump(amount)}
+                          >
+                            +€{amount}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <FieldError message={formError} />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      {snipe ? (
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="lg"
+                          className="w-full sm:flex-1"
+                          loading={cancelling}
+                          disabled={submitting}
+                          onClick={() => void cancelArmedSnipe()}
+                        >
+                          Cancel Snipe
+                        </Button>
+                      ) : null}
                       <Button
-                        key={amount}
                         type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => bump(amount)}
+                        size="lg"
+                        className="w-full sm:flex-1"
+                        loading={submitting}
+                        disabled={cancelling}
+                        onClick={() => void armSnipe()}
                       >
-                        +€{amount}
+                        <Crosshair className="h-4 w-4" />
+                        {snipe ? "Update Snipe (Gixen)" : "Arm Snipe (Gixen)"}
                       </Button>
-                    ))}
-                  </div>
-                </div>
-                <FieldError message={formError} />
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  {snipe ? (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="lg"
-                      className="w-full sm:flex-1"
-                      loading={cancelling}
-                      disabled={submitting}
-                      onClick={() => void cancelArmedSnipe()}
-                    >
-                      Cancel Snipe
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="w-full sm:flex-1"
-                    loading={submitting}
-                    disabled={cancelling}
-                    onClick={() => void armSnipe()}
-                  >
-                    <Crosshair className="h-4 w-4" />
-                    {snipe ? "Update Snipe (Gixen)" : "Arm Snipe (Gixen)"}
-                  </Button>
-                </div>
+                    </div>
+                  </>
+                ) : null}
               </>
             ) : null}
 

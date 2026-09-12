@@ -3,6 +3,7 @@
 import { Clock3, Crosshair, Gavel, ImageOff, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { listingSnipeCardClass, SnipeStatusBadge } from "@/components/feed/SnipeStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
@@ -12,8 +13,8 @@ import {
   formatEuro,
   formatEuroAmount,
   isAuctionListing,
-  listingActiveSnipe,
   listingCardFormatLabel,
+  listingSnipeState,
 } from "@/lib/format-ui";
 import type { SeenListing } from "@/lib/types";
 
@@ -29,7 +30,8 @@ export function DealCard({
 }) {
   const auction = isAuctionListing(listing);
   const [countdown, setCountdown] = useState(formatCountdown(listing.endsAt));
-  const snipe = listingActiveSnipe(listing);
+  const snipe = listingSnipeState(listing);
+  const canArm = auction && (!snipe || snipe.kind === "armed");
 
   useEffect(() => {
     if (!listing.endsAt) return;
@@ -40,12 +42,7 @@ export function DealCard({
   }, [listing.endsAt]);
 
   return (
-    <Card
-      className={cn(
-        "overflow-hidden",
-        snipe && "border-amber-400/45 ring-1 ring-emerald-400/30",
-      )}
-    >
+    <Card className={cn("overflow-hidden", listingSnipeCardClass(listing))}>
       <button
         type="button"
         onClick={() => onOpen(listing)}
@@ -78,15 +75,7 @@ export function DealCard({
                 <span className="select-none">AI Verified</span>
               </span>
             ) : null}
-            {snipe ? (
-              <span
-                title={`Gixen snipe armed at €${formatEuroAmount(snipe.maxBid)}`}
-                className={`${BADGE_BASE} border border-emerald-400/40 bg-emerald-950/55 text-emerald-100`}
-              >
-                <Crosshair className="size-3 shrink-0 text-amber-300" />
-                <span className="select-none tabular-nums">Sniped: €{formatEuroAmount(snipe.maxBid)}</span>
-              </span>
-            ) : null}
+            <SnipeStatusBadge listing={listing} />
           </div>
           <span className={`${BADGE_BASE} border border-white/15 bg-black/40 tabular-nums text-zinc-50`}>
             {formatEuro(listing.price, listing.currency)}
@@ -119,13 +108,13 @@ export function DealCard({
           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5">{listing.monitor.name}</span>
           <span className="ml-auto tabular-nums text-zinc-500">{formatDateTime(listing.createdAt)}</span>
         </div>
-        {auction ? (
+        {canArm ? (
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={() => onOpen(listing, "snipe")}>
               <Crosshair className="h-3.5 w-3.5" />
-              {snipe ? "Update Snipe" : "Set Snipe"}
+              {snipe?.kind === "armed" ? "Update Snipe" : "Set Snipe"}
             </Button>
-            {snipe ? (
+            {snipe?.kind === "armed" ? (
               <span className="text-xs text-emerald-300">Armed · €{formatEuroAmount(snipe.maxBid)}</span>
             ) : null}
           </div>
