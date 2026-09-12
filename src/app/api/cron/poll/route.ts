@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
+import { syncEndedSnipeOutcomes } from "@/lib/sniper/sync-outcomes";
 import { BACKGROUND_SEARCH_LIMIT, executePollCycle, MANUAL_SEARCH_LIMIT } from "@/services/engine/poller";
 
 export const runtime = "nodejs";
@@ -27,11 +28,17 @@ async function handlePoll(request: Request) {
       ...options,
       searchLimit: options.searchLimit ?? (isSameOrigin(request) ? MANUAL_SEARCH_LIMIT : BACKGROUND_SEARCH_LIMIT),
     });
+    const snipes = await syncEndedSnipeOutcomes().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[cron/poll] Snipe outcome sync failed: ${message}`);
+      return null;
+    });
     return NextResponse.json({
       ok: true,
       mode: "serverless",
       reset: Boolean(options.reset),
       ...summary,
+      ...(snipes ? { snipeSync: snipes } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

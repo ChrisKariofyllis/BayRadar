@@ -112,6 +112,43 @@ export async function scheduleSnipe(itemId: string, maxBid: number): Promise<Gix
   }
 }
 
+export type GixenOutcomeStatus = "WON" | "OUTBID" | "FAILED";
+
+export interface GixenSnipeOutcome {
+  status: GixenOutcomeStatus;
+  finalPrice?: number;
+  rawStatus?: string;
+}
+
+export async function syncSnipeOutcomes(
+  itemIds?: string[],
+): Promise<Record<string, GixenSnipeOutcome>> {
+  const credentials = await requireGixenCredentials();
+  if (!credentials.ok) {
+    throw new Error(credentials.error);
+  }
+
+  const session = await openGixenSession(credentials.username, credentials.password);
+  await persistHandshake({
+    ok: true,
+    mirrorActive: session.mirrorActive,
+    cookie: session.jar.header(),
+    sessionId: session.sessionId,
+  });
+
+  const parsed = parseSnipeOutcomes(session.html);
+  if (itemIds == null) return parsed;
+
+  const wanted = new Set(
+    itemIds.map((id) => normalizeEbayItemId(id)).filter((id): id is string => Boolean(id)),
+  );
+  const filtered: Record<string, GixenSnipeOutcome> = {};
+  for (const id of wanted) {
+    if (parsed[id]) filtered[id] = parsed[id];
+  }
+  return filtered;
+}
+
 export async function cancelSnipe(itemId: string): Promise<GixenScheduleResult> {
   const item = normalizeEbayItemId(itemId);
   if (!item) {
@@ -586,6 +623,79 @@ function findDeleteSnipe(
       [deleteName]: "Delete",
     },
   };
+}
+
+function parseSnipeOutcomes(html: string): Record<string, GixenSnipeOutcome> {
+  const outcomes: Record<string, GixenSnipeOutcome> = {};
+  const itemRe = /name=["']edititemid_(\d+)["'][^>]*value=["'](\d+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = itemRe.exec(html))) {
+    const itemId = match[2] || match[1];
+    if (!itemId) continue;
+    const start = Math.max(0, match.index - 80);
+    const chunk = decodeHtml(html.slice(start, match.index + 2800));
+    const main = extractLabeledStatus(chunk, "main") ?? extractBareStatus(chunk);
+    const mirror = extractLabeledStatus(chunk, "mirror");
+    const mapped = mapGixenOutcome(main, mirror);
+    if (!mapped) continue;
+    outcomes[itemId] = {
+      status: mapped,
+      rawStatus: [main, mirror].filter(Boolean).join(" / ") || undefined,
+      finalPrice: extractCurrentBid(chunk),
+    };
+  }
+  return outcomes;
+}
+
+function extractLabeledStatus(chunk: string, which: "main" | "mirror"): string | undefined {
+  const labeled = chunk.match(
+    new RegExp(`Status\\s*\\(${which}\\)\\s*:\\s*(?:</t[dh]>\\s*<t[dh][^>]*>)?\\s*([^<\\n]{1,40})`, "i"),
+  )?.[1]?.trim();
+  if (labeled) return labeled.replace(/&nbsp;/gi, " ").trim();
+  return undefined;
+}
+
+function extractBareStatus(chunk: string): string | undefined {
+  return chunk.match(/\b(WON|WIN|OUTBID|OUT\s*BID|FAILED|ERROR|SNIPED|SCHEDULED|HIGH\s*BIDDER|TOO\s*LATE)\b/i)?.[1];
+}
+
+function mapGixenOutcome(main?: string, mirror?: string): GixenOutcomeStatus | null {
+  const ranks = [main, mirror].map(classifyGixenStatus);
+  if (ranks.includes("WON")) return "WON";
+  if (ranks.includes("OUTBID")) return "OUTBID";
+  if (ranks.includes("FAILED")) return "FAILED";
+  return null;
+}
+
+function classifyGixenStatus(raw?: string): GixenOutcomeStatus | null {
+  if (!raw) return null;
+  const text = raw.toUpperCase().replace(/\s+/g, " ").trim();
+  if (/\bWON\b|\bWIN\b|YOU WON|SUCCESS/.test(text)) return "WON";
+  if (/\bOUTBID\b|OUT BID|\bLOST\b/.test(text)) return "OUTBID";
+  if (/\bFAIL|\bERROR\b|TOO LATE|COULD NOT|\bAUTH\b|NOT MET/.test(text)) return "FAILED";
+  return null;
+}
+
+function extractCurrentBid(chunk: string): number | undefined {
+  const labeled = chunk.match(
+    /Current(?:\s*bid)?(?:\s*\([^)]*\))?\s*:?\s*<\/t[dh]>\s*<t[dh][^>]*>\s*([\d.,]+)/i,
+  )?.[1];
+  const loose = chunk.match(/([\d]+[.,]\d{2})\s*(?:EUR|USD|GBP|€|\$)/i)?.[1];
+  return parseMoney(labeled ?? loose);
+}
+
+function parseMoney(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.replace(/\s/g, "").replace(",", ".");
+  const value = Number.parseFloat(normalized);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)));
 }
 
 function isSnipeListed(html: string, itemId: string): boolean {

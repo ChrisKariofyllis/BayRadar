@@ -3,6 +3,7 @@ import "dotenv/config";
 import { schedule, shutdown, validate, type ScheduledTask } from "node-cron";
 
 import { prisma } from "@/db/prisma";
+import { syncEndedSnipeOutcomes } from "@/lib/sniper/sync-outcomes";
 import { executePollCycle } from "@/services/engine/poller";
 
 const DEFAULT_CRON = process.env.WORKER_DEFAULT_CRON?.trim() || "*/5 * * * *";
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
 
   const boot = await executePollCycle();
   console.log("[daemon] Startup poll complete", formatSummary(boot));
+  await runSnipeOutcomeSync("startup");
 
   process.once("SIGINT", () => void handleShutdown("SIGINT"));
   process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
@@ -59,6 +61,7 @@ async function syncPollSchedules(): Promise<void> {
       async () => {
         const summary = await executePollCycle({ cronSchedule: expression });
         console.log(`[daemon] Scheduled poll (${expression})`, formatSummary(summary));
+        await runSnipeOutcomeSync(expression);
       },
       { name: `poll:${expression}`, noOverlap: true },
     );
@@ -95,6 +98,19 @@ async function handleShutdown(signal: string): Promise<void> {
   }
 
   process.exit(0);
+}
+
+async function runSnipeOutcomeSync(label: string): Promise<void> {
+  try {
+    const result = await syncEndedSnipeOutcomes();
+    if (result.checked === 0) return;
+    console.log(
+      `[daemon] Snipe outcome sync (${label}) checked=${result.checked} updated=${result.updated} won=${result.won} outbid=${result.outbid} failed=${result.failed} skipped=${result.skipped}`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[daemon] Snipe outcome sync failed: ${message}`);
+  }
 }
 
 function formatSummary(summary: { totalMonitors: number; newDealsFound: number; errors: unknown[] }): string {
