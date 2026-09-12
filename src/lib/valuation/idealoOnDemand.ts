@@ -6,6 +6,7 @@ import puppeteer from "puppeteer-core";
 const IDEALO_ORIGIN = "https://www.idealo.de";
 const SEARCH_PATH = "/preisvergleich/MainSearchProductCategory.html";
 const TIMEOUT_MS = 25_000;
+const VARIANT_VISIT_LIMIT = 5;
 const CHROME_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
@@ -50,6 +51,8 @@ const GENERIC_TOKENS = new Set([
 ]);
 
 const STORAGE_TOKENS = new Set(["16", "32", "64", "128", "256", "512", "1024", "2048", "825"]);
+const KIT_RE = /\b(kit|objektiv|lens|bundle)\b|\d{2,3}\s*-\s*\d{2,3}(?:\s*mm)?|\+\s*\d{2,3}\s*mm/;
+const BODY_RE = /\b(gehause|body|bodyonly|ohne objektiv|nur gehause|ilce)\b/;
 
 export interface IdealoReferencePrice {
   referencePrice: number;
@@ -76,6 +79,12 @@ interface ProductCard {
   title: string;
   href: string;
   sponsored: boolean;
+  usedAb: number | null;
+}
+
+interface ProductVariant {
+  title: string;
+  href: string;
 }
 
 interface ConditionSnapshot {
@@ -109,6 +118,7 @@ async function scrapeIdealoReferencePrice(query: string): Promise<IdealoReferenc
 
   const searchUrl = `${IDEALO_ORIGIN}${SEARCH_PATH}?q=${encodeURIComponent(q)}`;
   let browser: Browser | null = null;
+  let debugPage: Page | null = null;
 
   try {
     browser = await puppeteer.launch({
@@ -125,6 +135,7 @@ async function scrapeIdealoReferencePrice(query: string): Promise<IdealoReferenc
     });
 
     const page = await browser.newPage();
+    debugPage = page;
     await page.setUserAgent(
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     );
@@ -132,70 +143,98 @@ async function scrapeIdealoReferencePrice(query: string): Promise<IdealoReferenc
     page.setDefaultTimeout(TIMEOUT_MS);
     page.setDefaultNavigationTimeout(TIMEOUT_MS);
 
-    console.log(`[idealo-ondemand] Opening ${searchUrl}`);
+    console.log(`[IdealoDebug] Search URL: ${searchUrl}`);
     await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
-    await sleep(800);
+    await sleep(1_000);
     await dismissConsent(page);
 
+    let searchCardBaseline: ScrapedOffer | null = null;
     if (!isProductPage(page.url())) {
       const products = await collectProductLinks(page);
+      console.log(
+        `[IdealoDebug] Search cards: ${products
+          .slice(0, 8)
+          .map((item) => `${item.title.slice(0, 60)}${item.usedAb != null ? ` usedAb=${item.usedAb}` : ""}`)
+          .join(" | ")}`,
+      );
       const bestProduct = pickRelevantProduct(products, q);
       if (!bestProduct) {
+        await dumpDebugContext(page, "no matching search product");
         throw new IdealoLookupError("No matching Idealo product found for this query.");
       }
-      console.log(`[idealo-ondemand] Opening product ${bestProduct.title} -> ${bestProduct.href}`);
+      if (bestProduct.usedAb != null) {
+        searchCardBaseline = {
+          title: bestProduct.title,
+          total: bestProduct.usedAb,
+          shop: "Idealo",
+          url: bestProduct.href,
+        };
+      }
+      console.log(`[IdealoDebug] Opening search hit ${bestProduct.title} -> ${bestProduct.href}`);
       await page.goto(bestProduct.href, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
-      await sleep(800);
+      await sleep(900);
       await dismissConsent(page);
     }
 
+    await page.waitForSelector("h1", { timeout: 8_000 }).catch(() => undefined);
+    console.log(`[IdealoDebug] Landed Product URL: ${page.url()}`);
+
     const heading = await pageTitle(page);
     if (heading && hasUnspecifiedVariant(q, heading, page.url())) {
+      await dumpDebugContext(page, `wrong sub-model "${heading}"`);
       throw new IdealoLookupError(
         `Idealo landed on "${heading}", which is a different sub-model than "${q}".`,
       );
     }
 
-    const before = await readConditionSnapshot(page);
-    const tabState = await activateBWareTab(page);
-    if (tabState === "missing" && !before.hasBWareTab) {
-      throw new IdealoLookupError("This Idealo product has no B-Ware & Gebraucht tab.");
+    const filters = await applyVariantFilters(page, q);
+    await clickLabeledControl(page, /alle varianten/i, 40);
+    await sleep(500);
+
+    const variants = (await collectVariants(page)).filter((variant) => variantMatchesQuery(variant, q));
+    console.log(
+      `[IdealoDebug] Available Variants/Tabs detected: [${variants.map((item) => item.title || item.href).join(" | ")}]`,
+    );
+
+    const offers: ScrapedOffer[] = [];
+    const current = await scrapeActiveProductOffers(page, q, filters.clickedStorage);
+    offers.push(...current.offers);
+
+    const extra = variants
+      .filter((variant) => canonicalUrl(variant.href) !== canonicalUrl(page.url()))
+      .sort((a, b) => b.href.length - a.href.length)
+      .slice(0, VARIANT_VISIT_LIMIT);
+    for (const variant of extra) {
+      console.log(`[IdealoDebug] Checking variant ${variant.title} -> ${variant.href}`);
+      try {
+        await page.goto(variant.href, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
+        await sleep(700);
+        await dismissConsent(page);
+        const scraped = await scrapeActiveProductOffers(page, q, false);
+        offers.push(...scraped.offers);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[IdealoDebug] Variant navigation failed ${variant.href}: ${message}`);
+      }
     }
 
-    await page.waitForFunction(
-      () => /preisvergleich\s+b-ware|b-ware\s*&\s*gebraucht/i.test(document.body.innerText || ""),
-      { timeout: 8_000 },
-    ).catch(() => undefined);
-    await sleep(900);
-
-    const after = await readConditionSnapshot(page);
-    const rawOffers = await extractBWareOffers(page);
-    const cleaned = rawOffers.map((offer) => ({ ...offer, shop: cleanShopName(offer.shop) }));
+    const cleaned = offers.map((offer) => ({ ...offer, shop: cleanShopName(offer.shop) }));
     let valid = dropPriceOutliers(cleaned.filter((offer) => isValidOffer(offer, q)));
     valid.sort((a, b) => a.total - b.total);
-
-    const neuAb = after.neuAb ?? before.neuAb;
-    const usedAb = after.usedAb ?? before.usedAb;
-    valid = rejectNewPrices(valid, neuAb, usedAb);
-
-    let picked = valid[0] ?? null;
-    if (!picked && usedAb != null) {
-      picked = {
-        title: after.heading || heading || q,
-        total: usedAb,
-        shop: "Idealo",
-        url: page.url(),
-      };
+    if (searchCardBaseline && isValidOffer(searchCardBaseline, q)) {
+      valid.push(searchCardBaseline);
+      valid.sort((a, b) => a.total - b.total);
     }
 
+    const picked = valid[0] ?? null;
     console.log(
-      `[idealo-ondemand] query="${q}" product="${after.heading || heading}" tab=${tabState}` +
-        ` neuAb=${neuAb ?? "-"} usedAb=${usedAb ?? "-"} raw=${rawOffers.length} matched=${valid.length}` +
-        (picked ? ` picked=€${picked.total} shop=${picked.shop}` : " picked=none"),
+      `[IdealoDebug] Offers parsed: raw=${offers.length} matched=${valid.length}` +
+        (picked ? ` lowest=€${picked.total} shop=${picked.shop} title="${picked.title}"` : " lowest=none"),
     );
 
     if (!picked) {
-      throw new IdealoLookupError("B-Ware & Gebraucht is available, but no matching used offers were listed.");
+      await dumpDebugContext(page, "no B-Ware offers after variant walk");
+      throw new IdealoLookupError("This Idealo product has no matching B-Ware & Gebraucht offers.");
     }
 
     return {
@@ -207,7 +246,10 @@ async function scrapeIdealoReferencePrice(query: string): Promise<IdealoReferenc
   } catch (error) {
     if (error instanceof IdealoLookupError) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[idealo-ondemand] scrape failed: ${message}`);
+    console.warn(`[IdealoDebug] scrape failed: ${message}`);
+    if (debugPage) {
+      await dumpDebugContext(debugPage, `uncaught ${message}`).catch(() => undefined);
+    }
     throw new IdealoLookupError("Could not load Idealo B-Ware prices right now. Try again in a moment.");
   } finally {
     if (browser) {
@@ -216,21 +258,67 @@ async function scrapeIdealoReferencePrice(query: string): Promise<IdealoReferenc
   }
 }
 
-export function isValidOffer(offer: { title: string; total: number }, query: string): boolean {
+async function scrapeActiveProductOffers(
+  page: Page,
+  query: string,
+  storageFilterApplied: boolean,
+): Promise<{ offers: ScrapedOffer[] }> {
+  const before = await readConditionSnapshot(page);
+  const tabState = await activateBWareTab(page);
+  await page.waitForSelector('[class*="productOffers"], [class*="OfferList"], h1', { timeout: 4_000 }).catch(() => undefined);
+  await page
+    .waitForFunction(
+      () => /preisvergleich\s+b-ware|b-ware\s*&\s*gebraucht/i.test(document.body.innerText || ""),
+      { timeout: 6_000 },
+    )
+    .catch(() => undefined);
+  await sleep(700);
+
+  const after = await readConditionSnapshot(page);
+  const raw = await extractBWareOffers(page);
+  const neuAb = after.neuAb ?? before.neuAb;
+  const usedAb = after.usedAb ?? before.usedAb;
+  let offers = stampStorage(rejectNewPrices(raw, neuAb, usedAb), query, storageFilterApplied);
+
+  if (usedAb != null && !offers.some((offer) => Math.abs(offer.total - usedAb) < 0.5)) {
+    offers.push(
+      ...stampStorage(
+        [
+          {
+            title: after.heading || (await pageTitle(page)) || query,
+            total: usedAb,
+            shop: "Idealo",
+            url: page.url(),
+          },
+        ],
+        query,
+        storageFilterApplied,
+      ),
+    );
+  }
+
+  console.log(
+    `[IdealoDebug] Product ${after.heading || page.url()} tab=${tabState} neuAb=${neuAb ?? "-"} usedAb=${usedAb ?? "-"} rows=${raw.length}`,
+  );
+  return { offers };
+}
+
+export function isValidOffer(offer: { title: string; total: number; url?: string }, query: string): boolean {
   if (!Number.isFinite(offer.total) || offer.total <= 0 || offer.total >= 100_000) return false;
   const title = normalizeText(offer.title);
   if (!title) return false;
   if (hasCrossBrandConflict(normalizeText(query), title)) return false;
   if (isAccessoryText(title) && !isAccessoryText(normalizeText(query))) return false;
-  if (hasUnspecifiedVariant(query, offer.title)) return false;
+  if (!queryWantsKit(query) && isKitText(title)) return false;
+  if (hasUnspecifiedVariant(query, offer.title, offer.url)) return false;
   if (/\bneu\b/.test(title) && !/\b(b-ware|gebraucht|refurbished|used)\b/.test(title)) return false;
 
+  const haystack = `${title} ${normalizeText(offer.url || "")}`;
   const required = mandatoryTokens(query).filter((token) => !STORAGE_TOKENS.has(token));
-  if (required.length > 0 && !required.every((token) => titleHasToken(title, token))) return false;
+  if (required.length > 0 && !required.every((token) => titleHasToken(haystack, token))) return false;
 
   const storage = mandatoryTokens(query).filter((token) => STORAGE_TOKENS.has(token));
-  const titleHasAnyStorage = [...STORAGE_TOKENS].some((token) => titleHasToken(title, token));
-  if (storage.length > 0 && titleHasAnyStorage && !storage.every((token) => titleHasToken(title, token))) {
+  if (storage.length > 0 && !storage.every((token) => titleHasToken(haystack, token))) {
     return false;
   }
   return true;
@@ -254,28 +342,59 @@ export function pickRelevantProduct(products: ProductCard[], query: string): Pro
 function scoreProduct(product: ProductCard, query: string): number {
   const title = product.title || fallbackTitleFromHref(product.href);
   const haystack = `${title} ${fallbackTitleFromHref(product.href)}`;
-  if (hasCrossBrandConflict(normalizeText(query), normalizeText(haystack))) return -1;
-  if (isAccessoryText(normalizeText(haystack)) && !isAccessoryText(normalizeText(query))) return -1;
+  const normalized = normalizeText(haystack);
+  if (hasCrossBrandConflict(normalizeText(query), normalized)) return -1;
+  if (isAccessoryText(normalized) && !isAccessoryText(normalizeText(query))) return -1;
   if (hasUnspecifiedVariant(query, haystack, product.href)) return -1;
+  if (!queryWantsKit(query) && isKitText(normalized)) return -1;
 
   const required = mandatoryTokens(query).filter((token) => !STORAGE_TOKENS.has(token));
-  if (required.length > 0 && !required.every((token) => titleHasToken(normalizeText(haystack), token))) {
+  if (required.length > 0 && !required.every((token) => titleHasToken(normalized, token))) {
     return -1;
   }
 
   let score = 80;
+  if (isBodyText(normalized)) score += 45;
+  if (product.usedAb != null) score += 18;
   const storage = mandatoryTokens(query).filter((token) => STORAGE_TOKENS.has(token));
-  const normalizedTitle = normalizeText(haystack);
   if (storage.length > 0) {
-    const matchedStorage = storage.filter((token) => titleHasToken(normalizedTitle, token)).length;
+    const matchedStorage = storage.filter((token) => titleHasToken(normalized, token)).length;
     score += matchedStorage * 25;
     const otherStorage = [...STORAGE_TOKENS].some(
-      (token) => !storage.includes(token) && titleHasToken(normalizedTitle, token),
+      (token) => !storage.includes(token) && titleHasToken(normalized, token),
     );
     if (otherStorage && matchedStorage === 0) score -= 20;
   }
   score -= Math.min(title.length, 90) * 0.08;
   return score;
+}
+
+function variantMatchesQuery(variant: ProductVariant, query: string): boolean {
+  const haystack = `${variant.title} ${fallbackTitleFromHref(variant.href)}`;
+  const normalized = normalizeText(haystack);
+  if (!queryWantsKit(query) && isKitText(normalized)) return false;
+  if (hasUnspecifiedVariant(query, haystack, variant.href)) return false;
+  const required = mandatoryTokens(query).filter((token) => !STORAGE_TOKENS.has(token));
+  if (required.length > 0 && !required.every((token) => titleHasToken(normalized, token))) return false;
+  const storage = mandatoryTokens(query).filter((token) => STORAGE_TOKENS.has(token));
+  if (storage.length === 0) return true;
+  const mentionsStorage = [...STORAGE_TOKENS].some((token) => titleHasToken(normalized, token));
+  if (!mentionsStorage) return true;
+  return storage.every((token) => titleHasToken(normalized, token));
+}
+
+function stampStorage(offers: ScrapedOffer[], query: string, storageFilterApplied: boolean): ScrapedOffer[] {
+  const storage = mandatoryTokens(query).filter((token) => STORAGE_TOKENS.has(token));
+  if (!storageFilterApplied || storage.length === 0) return offers;
+  return offers.map((offer) => {
+    const haystack = normalizeText(`${offer.title} ${offer.url}`);
+    if (storage.every((token) => titleHasToken(haystack, token))) return offer;
+    const otherStorage = [...STORAGE_TOKENS].some(
+      (token) => !storage.includes(token) && titleHasToken(haystack, token),
+    );
+    if (otherStorage) return offer;
+    return { ...offer, title: `${offer.title} ${storage.join(" ")} GB` };
+  });
 }
 
 function hasUnspecifiedVariant(query: string, title: string, href = ""): boolean {
@@ -329,6 +448,18 @@ function isAccessoryText(text: string): boolean {
   );
 }
 
+function queryWantsKit(query: string): boolean {
+  return KIT_RE.test(normalizeText(query));
+}
+
+function isKitText(text: string): boolean {
+  return KIT_RE.test(text);
+}
+
+function isBodyText(text: string): boolean {
+  return BODY_RE.test(text);
+}
+
 function hasCrossBrandConflict(query: string, title: string): boolean {
   if (hasAny(query, ["iphone", "apple"]) && hasAny(title, ["galaxy", "samsung", "pixel", "xiaomi"])) {
     return true;
@@ -341,15 +472,13 @@ function hasCrossBrandConflict(query: string, title: string): boolean {
 
 function titleHasToken(title: string, token: string): boolean {
   if (title.includes(token)) return true;
-  if (token === "ps5") {
-    return /\bplaystation\b/.test(title) && /\b5\b/.test(title);
-  }
-  if (token === "ps4") {
-    return /\bplaystation\b/.test(title) && /\b4\b/.test(title);
-  }
-  if (token === "iphone") {
-    return /\biphone\b/.test(title);
-  }
+  if (token === "ps5") return /\bplaystation\b/.test(title) && /\b5\b/.test(title);
+  if (token === "ps4") return /\bplaystation\b/.test(title) && /\b4\b/.test(title);
+  if (token === "iphone") return /\biphone\b/.test(title);
+  if (/^a\d{4}$/.test(token)) return title.includes(token.slice(1));
+  if (token === "r6") return /\br6\b/.test(title);
+  if (token === "r5") return /\br5\b/.test(title);
+  if (token === "6700") return /\ba6700\b/.test(title) || /\bilce\s*6700\b/.test(title);
   return false;
 }
 
@@ -359,6 +488,10 @@ function hasAny(text: string, needles: string[]): boolean {
 
 function isProductPage(url: string): boolean {
   return /\/OffersOfProduct\//i.test(url);
+}
+
+function canonicalUrl(url: string): string {
+  return url.split("#")[0]?.split("?")[0] ?? url;
 }
 
 function fallbackTitleFromHref(href: string): string {
@@ -379,17 +512,62 @@ async function pageTitle(page: Page): Promise<string> {
   }
 }
 
-async function dismissConsent(page: Page): Promise<void> {
+async function dumpDebugContext(page: Page, reason: string): Promise<void> {
   try {
+    const title = (await page.title().catch(() => "")) || (await pageTitle(page));
+    const url = page.url();
+    const text = await page.evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1_600));
+    console.warn(`[IdealoDebug] FAIL ${reason}`);
+    console.warn(`[IdealoDebug] title="${title}" url=${url}`);
+    console.warn(`[IdealoDebug] Page text: ${text}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[IdealoDebug] Could not dump page context: ${message}`);
+  }
+}
+
+async function dismissConsent(page: Page): Promise<void> {
+  const clickAccept = async () => {
     await page.evaluate(() => {
       const match = (re: RegExp) =>
         [...document.querySelectorAll("button, a, [role='button']")].find((node) =>
           re.test((node.textContent || "").replace(/\s+/g, " ").trim()),
         ) as HTMLElement | undefined;
-      match(/alle akzeptieren|accept all|zustimmen|einverstanden/i)?.click();
+      match(/alle akzeptieren|accept all|zustimmen|einverstanden|akzeptieren/i)?.click();
+      const accept = document.querySelector(
+        'button[id*="accept"], button[id*="Accept"], button[title*="akzeptieren" i], button[aria-label*="akzeptieren" i]',
+      ) as HTMLElement | null;
+      accept?.click();
+    });
+  };
+
+  try {
+    await page.waitForSelector("#sp_message_container, iframe[id*='sp_message'], #usercentrics-root", {
+      timeout: 2_500,
     });
   } catch {
+    // banner may already be gone
+  }
+
+  try {
+    await clickAccept();
+  } catch {
     // cookie banner is optional
+  }
+
+  for (const frame of page.frames()) {
+    const url = frame.url();
+    if (!/sp_message|sourcepoint|consent|usercentrics|privacy/i.test(url)) continue;
+    try {
+      await frame.evaluate(() => {
+        const button = [...document.querySelectorAll("button, a")].find((node) =>
+          /alle akzeptieren|accept all|zustimmen|akzeptieren/i.test(node.textContent || ""),
+        ) as HTMLElement | undefined;
+        button?.click();
+      });
+    } catch {
+      // iframe may be detached
+    }
   }
 
   try {
@@ -408,10 +586,66 @@ async function dismissConsent(page: Page): Promise<void> {
   }
 }
 
+async function applyVariantFilters(page: Page, query: string): Promise<{ clickedBody: boolean; clickedStorage: boolean }> {
+  let clickedBody = false;
+  let clickedStorage = false;
+
+  if (!queryWantsKit(query)) {
+    clickedBody =
+      (await clickLabeledControl(page, /^(body|gehäuse|nur gehäuse)\b/i, 28)) ||
+      (await clickLabeledControl(page, /ohne objektiv/i, 28));
+    if (clickedBody) {
+      console.log("[IdealoDebug] Clicked Body / Gehäuse / ohne Objektiv filter");
+      await sleep(600);
+    }
+  }
+
+  const storage = mandatoryTokens(query).find((token) => STORAGE_TOKENS.has(token));
+  if (storage) {
+    clickedStorage = await clickLabeledControl(page, new RegExp(`^${storage}\\s*gb$`, "i"), 18);
+    if (clickedStorage) {
+      console.log(`[IdealoDebug] Clicked storage filter ${storage} GB`);
+      await sleep(500);
+    }
+  }
+
+  return { clickedBody, clickedStorage };
+}
+
+async function clickLabeledControl(page: Page, pattern: RegExp, maxLength: number): Promise<boolean> {
+  try {
+    return await page.evaluate(
+      (source, flags, limit) => {
+        const re = new RegExp(source, flags);
+        const compact = (node: Element) => (node.textContent || "").replace(/\s+/g, " ").trim();
+        const nodes = [
+          ...document.querySelectorAll(
+            "a, button, label, span, div, li, [role='tab'], [role='radio'], [role='button']",
+          ),
+        ];
+        const match = nodes
+          .filter((node) => {
+            const text = compact(node);
+            return re.test(text) && text.length <= limit;
+          })
+          .sort((a, b) => compact(a).length - compact(b).length)[0];
+        if (!match) return false;
+        ((match.closest("a, button, [role='tab'], [role='button'], [role='radio']") ?? match) as HTMLElement).click();
+        return true;
+      },
+      pattern.source,
+      pattern.flags,
+      maxLength,
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function activateBWareTab(page: Page): Promise<"clicked" | "navigated" | "missing"> {
   try {
-    await page.locator("::-p-text(B-Ware & Gebraucht)").setTimeout(2_500).click();
-    console.log("[idealo-ondemand] Clicked B-Ware & Gebraucht tab");
+    await page.locator("::-p-text(B-Ware & Gebraucht)").setTimeout(3_500).click();
+    console.log("[IdealoDebug] Clicked B-Ware & Gebraucht tab");
     return "clicked";
   } catch {
     // fall through to DOM search
@@ -423,7 +657,7 @@ async function activateBWareTab(page: Page): Promise<"clicked" | "navigated" | "
       const h1Top = (document.querySelector("h1") as HTMLElement | null)?.offsetTop ?? 0;
       const nodes = [
         ...document.querySelectorAll(
-          "a, button, label, span, div, li, [role='tab'], [role='radio'], [role='button'], [class*='condition'], [class*='Condition']",
+          "a, button, label, span, div, li, [role='tab'], [role='radio'], [role='button'], [class*='condition'], [class*='Condition'], [class*='used']",
         ),
       ];
       const matches = nodes
@@ -438,7 +672,8 @@ async function activateBWareTab(page: Page): Promise<"clicked" | "navigated" | "
         });
       const match = matches[0];
       if (!match) return { kind: "missing" as const, href: "" };
-      const clickable = (match.closest("a, button, [role='tab'], [role='button'], [role='radio']") ?? match) as HTMLElement;
+      const clickable = (match.closest("a, button, [role='tab'], [role='button'], [role='radio']") ??
+        match) as HTMLElement;
       const href = clickable instanceof HTMLAnchorElement ? clickable.href : clickable.closest("a")?.href ?? "";
       const current = location.href.split("#")[0];
       const next = href.split("#")[0];
@@ -450,18 +685,18 @@ async function activateBWareTab(page: Page): Promise<"clicked" | "navigated" | "
     });
 
     if (!target || target.kind === "missing") {
-      console.log("[idealo-ondemand] B-Ware tab not found");
+      console.log("[IdealoDebug] B-Ware tab not found on this product");
       return "missing";
     }
 
     if (target.kind === "href" && target.href) {
       await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
       await sleep(700);
-      console.log("[idealo-ondemand] Navigated to B-Ware & Gebraucht");
+      console.log("[IdealoDebug] Navigated to B-Ware & Gebraucht");
       return "navigated";
     }
 
-    console.log("[idealo-ondemand] Clicked B-Ware & Gebraucht tab");
+    console.log("[IdealoDebug] Clicked B-Ware & Gebraucht tab");
     return "clicked";
   } catch {
     return "missing";
@@ -484,7 +719,7 @@ async function readConditionSnapshot(page: Page): Promise<ConditionSnapshot> {
         heading?.parentElement?.innerText ||
         document.body.innerText ||
         "";
-      const body = stage.replace(/\s+/g, " ").slice(0, 5000);
+      const body = stage.replace(/\s+/g, " ").slice(0, 5_000);
       const neuAb = parseGermanPrice(body.match(/\bNeu\s+ab\s*((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€/i)?.[1] ?? "");
       const usedAb = parseGermanPrice(
         body.match(/B-Ware\s*&\s*Gebraucht\s+ab\s*((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€/i)?.[1] ??
@@ -506,8 +741,14 @@ async function readConditionSnapshot(page: Page): Promise<ConditionSnapshot> {
 async function collectProductLinks(page: Page): Promise<ProductCard[]> {
   try {
     return await page.evaluate(() => {
+      const parseGermanPrice = (raw: string): number | null => {
+        const match = raw.replace(/\s/g, "").match(/(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/);
+        if (!match) return null;
+        const value = Number(`${match[1].replace(/\./g, "")}.${match[2]}`);
+        return Number.isFinite(value) && value > 0 && value < 100_000 ? value : null;
+      };
       const seen = new Set<string>();
-      const products: Array<{ title: string; href: string; sponsored: boolean }> = [];
+      const products: Array<{ title: string; href: string; sponsored: boolean; usedAb: number | null }> = [];
       for (const anchor of document.querySelectorAll('a[href*="OffersOfProduct"]')) {
         const href = (anchor as HTMLAnchorElement).href?.split("#")[0];
         if (!href || seen.has(href) || /clickout|redirect/i.test(href)) continue;
@@ -523,13 +764,54 @@ async function collectProductLinks(page: Page): Promise<ProductCard[]> {
         )
           .replace(/\s+/g, " ")
           .trim();
+        const usedAb = parseGermanPrice(
+          cardText.match(/B-Ware[\s\S]{0,40}?((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€/i)?.[1] ??
+            cardText.match(/Gebraucht[\s\S]{0,40}?((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€/i)?.[1] ??
+            cardText.match(/ab\s*((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€[^.]{0,24}(B-Ware|Gebraucht)/i)?.[1] ??
+            "",
+        );
         products.push({
           title: title.slice(0, 180),
           href,
           sponsored: /anzeige|sponsored|advert/i.test(cardText),
+          usedAb,
         });
       }
       return products;
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function collectVariants(page: Page): Promise<ProductVariant[]> {
+  try {
+    return await page.evaluate(() => {
+      const compact = (node: Element) => (node.textContent || "").replace(/\s+/g, " ").trim();
+      const seen = new Set<string>();
+      const variants: Array<{ title: string; href: string }> = [];
+      const label = [...document.querySelectorAll("h1, h2, h3, h4, legend, span, button, p, div")].find((node) => {
+        const text = compact(node);
+        return text.length > 0 && text.length < 80 && /varianten/i.test(text);
+      });
+      const labeledRoot =
+        label?.closest("section, article, [class*='variant'], [class*='Variant'], [class*='filter']") ??
+        label?.parentElement ??
+        null;
+      const scoped =
+        labeledRoot && labeledRoot.querySelectorAll('a[href*="OffersOfProduct"]').length > 0
+          ? labeledRoot
+          : document;
+      for (const anchor of scoped.querySelectorAll('a[href*="OffersOfProduct"]')) {
+        const href = (anchor as HTMLAnchorElement).href?.split("#")[0];
+        if (!href || seen.has(href) || /clickout|redirect/i.test(href)) continue;
+        seen.add(href);
+        const title = (anchor.getAttribute("title") || (anchor as HTMLElement).innerText || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        variants.push({ title: title.slice(0, 120), href });
+      }
+      return variants;
     });
   } catch {
     return [];
@@ -553,8 +835,8 @@ async function extractBWareOffers(page: Page): Promise<ScrapedOffer[]> {
       const offers: Array<{ title: string; total: number; shop: string; url: string }> = [];
 
       const headingNodes = [...document.querySelectorAll("h1, h2, h3, h4, legend, [class*='title']")];
-      const bwareHeading = headingNodes.find((node) =>
-        /b-ware/i.test(node.textContent || "") && /gebraucht|preisvergleich/i.test(node.textContent || ""),
+      const bwareHeading = headingNodes.find(
+        (node) => /b-ware/i.test(node.textContent || "") && /gebraucht|preisvergleich/i.test(node.textContent || ""),
       );
       const scopedRoot =
         bwareHeading?.closest("section, article, [class*='productOffers'], [class*='Offer']") ??
@@ -608,9 +890,10 @@ async function extractBWareOffers(page: Page): Promise<ScrapedOffer[]> {
       }
 
       const body = (document.body.innerText || "").replace(/\s+/g, " ");
-      const usedBlock = body.split(/Preisvergleich\s+B-Ware\s*&\s*Gebraucht/i)[1]?.slice(0, 2500)
-        ?? body.split(/B-Ware\s*&\s*Gebraucht/i)[1]?.slice(0, 2500)
-        ?? "";
+      const usedBlock =
+        body.split(/Preisvergleich\s+B-Ware\s*&\s*Gebraucht/i)[1]?.slice(0, 2_500) ??
+        body.split(/B-Ware\s*&\s*Gebraucht/i)[1]?.slice(0, 2_500) ??
+        "";
       const abMatch = usedBlock.match(/ab\s*((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})\s*€/i);
       const abPrice = parseGermanPrice(abMatch?.[1] ?? "");
       if (abPrice != null && offers.length === 0) {
