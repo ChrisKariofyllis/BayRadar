@@ -32,6 +32,10 @@ export interface EbayItemSummary {
   itemEndDate?: string;
   categories?: Array<{ categoryId: string; categoryName: string }>;
   condition?: string;
+  shippingOptions?: Array<{
+    shippingCostType?: string;
+    shippingCost?: EbayPrice;
+  }>;
 }
 
 export interface EbaySearchResponse {

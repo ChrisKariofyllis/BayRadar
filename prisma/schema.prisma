@@ -75,6 +75,8 @@ model SeenListing {
   itemUrl        String
   imageUrl       String?
   sellerFeedback Float?
+  shippingCost   Float?
+  shippingCurrency String?
   endsAt         DateTime?
   notifiedAt     DateTime    @default(now())
   createdAt      DateTime    @default(now())

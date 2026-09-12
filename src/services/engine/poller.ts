@@ -354,6 +354,20 @@ function toSeenListingInput(monitorId: string, item: EbayItemSummary) {
     itemUrl: item.itemWebUrl || `https://www.ebay.com/itm/${item.itemId}`,
     imageUrl: item.image?.imageUrl ?? null,
     sellerFeedback: Number.isFinite(feedback) ? feedback : null,
+    ...extractShipping(item),
     endsAt: item.itemEndDate ? new Date(item.itemEndDate) : null,
   };
+}
+
+function extractShipping(item: EbayItemSummary): { shippingCost: number | null; shippingCurrency: string | null } {
+  const option = item.shippingOptions?.[0];
+  const raw = option?.shippingCost?.value;
+  const value = raw != null && raw !== "" ? Number.parseFloat(raw) : Number.NaN;
+  if (Number.isFinite(value)) {
+    return { shippingCost: value, shippingCurrency: option?.shippingCost?.currency ?? item.price?.currency ?? "EUR" };
+  }
+  if (option?.shippingCostType?.toUpperCase() === "FREE") {
+    return { shippingCost: 0, shippingCurrency: item.price?.currency ?? "EUR" };
+  }
+  return { shippingCost: null, shippingCurrency: null };
 }

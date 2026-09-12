@@ -30,6 +30,7 @@ interface MockListingSeed {
   categoryId: string;
   categoryName: string;
   imageUrl?: string;
+  shippingCost?: string;
 }
 
 const MOCK_SEEDS: MockListingSeed[] = [
@@ -40,6 +41,7 @@ const MOCK_SEEDS: MockListingSeed[] = [
     buyingOptions: ["AUCTION"],
     bidCount: 7,
     endsInHours: 3,
+    shippingCost: "6.90",
     condition: "USED_VERY_GOOD",
     seller: { username: "retro_deals_hh", feedbackPercentage: "99.6", feedbackScore: 1842 },
     categoryId: "139971",
@@ -82,6 +84,7 @@ const MOCK_SEEDS: MockListingSeed[] = [
     buyingOptions: ["AUCTION", "FIXED_PRICE"],
     bidCount: 3,
     endsInHours: 18,
+    shippingCost: "0.00",
     condition: "USED_GOOD",
     seller: { username: "pixel_basement", feedbackPercentage: "100.0", feedbackScore: 903 },
     categoryId: "139971",
@@ -204,6 +207,14 @@ function toMockItem(seed: MockListingSeed, now: number): EbayItemSummary {
     itemEndDate: endMs ? new Date(endMs).toISOString() : undefined,
     categories: [{ categoryId: seed.categoryId, categoryName: seed.categoryName }],
     condition: seed.condition,
+    shippingOptions: seed.shippingCost
+      ? [
+          {
+            shippingCostType: Number.parseFloat(seed.shippingCost) <= 0 ? "FREE" : "FIXED",
+            shippingCost: { value: seed.shippingCost, currency },
+          },
+        ]
+      : undefined,
   };
 }
 
