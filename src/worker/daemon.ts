@@ -5,15 +5,22 @@ import { schedule, shutdown, validate, type ScheduledTask } from "node-cron";
 import { prisma } from "@/db/prisma";
 import { syncEndedSnipeOutcomes } from "@/lib/sniper/sync-outcomes";
 import { executePollCycle } from "@/services/engine/poller";
+import { startTelegramBotLoop } from "@/worker/telegram-bot";
 
 const DEFAULT_CRON = process.env.WORKER_DEFAULT_CRON?.trim() || "*/5 * * * *";
 const RECONCILE_CRON = "*/5 * * * *";
 
 const pollJobs = new Map<string, ScheduledTask>();
 let shuttingDown = false;
+const shutdownAbort = new AbortController();
 
 async function main(): Promise<void> {
   console.log(`[daemon] BayRadar worker starting (default cron=${DEFAULT_CRON})`);
+
+  void startTelegramBotLoop(shutdownAbort.signal).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[daemon] Telegram bot loop crashed: ${message}`);
+  });
 
   await syncPollSchedules();
   schedule(RECONCILE_CRON, () => syncPollSchedules(), {
@@ -81,6 +88,7 @@ async function syncPollSchedules(): Promise<void> {
 async function handleShutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  shutdownAbort.abort();
   console.log(`[daemon] ${signal} received, shutting down gracefully…`);
 
   try {

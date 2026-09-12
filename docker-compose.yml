@@ -10,6 +10,8 @@ services:
       - DATABASE_URL=file:/app/prisma/data/bayradar.db
       - APP_SECRET=${APP_SECRET:-default-change-me-in-production}
       - EBAY_MOCK_MODE=${EBAY_MOCK_MODE:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - bayradar_data:/app/prisma/data
 
