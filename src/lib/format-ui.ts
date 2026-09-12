@@ -15,6 +15,12 @@ export function formatEuro(price: number, currency = "EUR"): string {
   return `${formatEuroAmount(price)} ${currency}`;
 }
 
+export function formatShipping(cost?: number | null, currency?: string | null): string {
+  if (cost == null) return "Shipping not listed — check eBay";
+  if (cost <= 0) return "Free shipping";
+  return `${formatEuro(cost, currency ?? "EUR")} shipping`;
+}
+
 export function formatMonitorPriceRange(
   minPrice: number | null | undefined,
   maxPrice: number,
@@ -39,17 +45,69 @@ export function formatBuyingType(type: BuyingType | string): string {
   }
 }
 
-export function isAuctionFormat(buyingFormat: string): boolean {
-  return buyingFormat.toUpperCase().includes("AUCTION");
+const AUCTION_TOKEN = /AUCTION|AUKTION|CHINESE|\bBID\b/i;
+
+export function isAuctionFormat(buyingFormat?: string | null, format?: string | null): boolean {
+  const raw = [buyingFormat, format].filter((value): value is string => Boolean(value?.trim())).join(",");
+  if (!raw) return false;
+  return AUCTION_TOKEN.test(raw.toUpperCase());
 }
 
-export function listingFormatLabel(buyingFormat: string): string {
-  const auction = isAuctionFormat(buyingFormat);
-  const bin = buyingFormat.toUpperCase().includes("FIXED_PRICE");
+export function isAuctionListing(listing: {
+  buyingFormat?: string | null;
+  format?: string | null;
+  bidCount?: number | null;
+  endsAt?: string | Date | null;
+  monitor?: { buyingType?: string | null } | null;
+}): boolean {
+  if (isAuctionFormat(listing.buyingFormat, listing.format)) return true;
+  if (listing.monitor?.buyingType?.toUpperCase() === "AUCTION") return true;
+  if ((listing.bidCount ?? 0) > 0) return true;
+
+  const raw = `${listing.buyingFormat ?? ""} ${listing.format ?? ""}`.trim().toUpperCase();
+  const unknown = !raw || raw === "UNKNOWN";
+  const monitorType = listing.monitor?.buyingType?.toUpperCase();
+  return Boolean(unknown && listing.endsAt && monitorType === "AUCTION");
+}
+
+export function isActiveSnipe(status?: string | null): boolean {
+  return status === "PENDING" || status === "SCHEDULED" || status === "EXECUTING";
+}
+
+export function toActiveSnipe(task?: {
+  id: string;
+  maxBid: number;
+  status: string;
+  active?: boolean | null;
+} | null): { id: string; maxBid: number; status: string } | null {
+  if (!task) return null;
+  if (!isActiveSnipe(task.status) && !task.active) return null;
+  return { id: task.id, maxBid: task.maxBid, status: task.status };
+}
+
+export function listingActiveSnipe(listing: {
+  activeSnipe?: { id: string; maxBid: number; status: string } | null;
+  snipeTask?: { id: string; maxBid: number; status: string; active?: boolean | null } | null;
+}): { id: string; maxBid: number; status: string } | null {
+  if (listing.activeSnipe) return listing.activeSnipe;
+  return toActiveSnipe(listing.snipeTask);
+}
+
+export function listingFormatLabel(buyingFormat?: string | null, format?: string | null): string {
+  const raw = [buyingFormat, format].filter((value): value is string => Boolean(value?.trim())).join(",") || "";
+  const auction = isAuctionFormat(raw);
+  const bin = raw.toUpperCase().includes("FIXED_PRICE");
   if (auction && bin) return "Auction + BIN";
   if (auction) return "Auction";
   if (bin) return "Buy It Now";
-  return buyingFormat || "Listing";
+  if (!raw || raw === "UNKNOWN") return "Listing";
+  return raw;
+}
+
+export function listingCardFormatLabel(listing: Parameters<typeof isAuctionListing>[0]): string {
+  const label = listingFormatLabel(listing.buyingFormat, listing.format);
+  if ((label === "Listing" || label === "UNKNOWN") && isAuctionListing(listing)) return "Auction";
+  return label;
 }
 
 export function formatDateTime(value: string | null | undefined): string {
