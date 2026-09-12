@@ -32,13 +32,34 @@ export interface SeenListing {
   itemUrl: string;
   imageUrl: string | null;
   sellerFeedback: number | null;
+  shippingCost?: number | null;
+  shippingCurrency?: string | null;
   endsAt: string | null;
   notifiedAt: string;
   createdAt: string;
   aiVerified: boolean;
   aiVerificationReason: string | null;
   status: "ACCEPTED" | "REJECTED";
-  monitor: { id: string; name: string };
+  monitor: { id: string; name: string; buyingType?: BuyingType };
+  snipeTask?: ListingSnipe | null;
+  activeSnipe?: ActiveSnipe | null;
+}
+
+export type SnipeStatus = "PENDING" | "SCHEDULED" | "EXECUTING" | "SUCCESS" | "OUTBID" | "FAILED" | "CANCELLED";
+
+export interface ActiveSnipe {
+  id: string;
+  maxBid: number;
+  status: string;
+}
+
+export interface ListingSnipe {
+  id: string;
+  status: SnipeStatus;
+  maxBid: number;
+  provider: string;
+  providerSnipeId?: string | null;
+  active?: boolean;
 }
 
 export interface NotificationChannel {
@@ -91,5 +112,11 @@ export interface SystemStatus {
   poller: {
     mode: "hybrid" | "worker" | "serverless";
     defaultCron: string;
+  };
+  gixen?: {
+    configured: boolean;
+    enabled: boolean;
+    handshakeOk?: boolean;
+    mirrorActive?: boolean;
   };
 }
