@@ -301,32 +301,35 @@ async function persistSeenListing(
   };
 
   try {
-    await prisma.seenListing.create({ data: record });
+    const created = await prisma.seenListing.create({ data: record });
+
+    if (options?.notify !== false && record.status === "ACCEPTED") {
+      try {
+        await dispatchDealNotification({
+          itemId: item.itemId,
+          listingId: created.id,
+          title: item.title,
+          price: record.price,
+          currency: record.currency,
+          buyingFormat: record.buyingFormat,
+          buyingType: monitor.buyingType,
+          itemUrl: record.itemUrl,
+          imageUrl: record.imageUrl,
+          bidCount: record.bidCount,
+          endsAt: record.endsAt,
+          monitorName: monitor.name,
+          maxPrice: monitor.maxPrice,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
+      }
+    }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return false;
     }
     throw error;
-  }
-
-  if (options?.notify !== false && record.status === "ACCEPTED") {
-    try {
-      await dispatchDealNotification({
-        itemId: item.itemId,
-        title: item.title,
-        price: record.price,
-        currency: record.currency,
-        buyingFormat: record.buyingFormat,
-        itemUrl: record.itemUrl,
-        imageUrl: record.imageUrl,
-        bidCount: record.bidCount,
-        endsAt: record.endsAt,
-        monitorName: monitor.name,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
-    }
   }
 
   return true;

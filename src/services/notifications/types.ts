@@ -1,14 +1,17 @@
 export interface DealPayload {
   itemId: string;
+  listingId?: string;
   title: string;
   price: number;
   currency: string;
   buyingFormat: string;
+  buyingType?: string | null;
   itemUrl: string;
   imageUrl?: string | null;
   bidCount?: number | null;
   endsAt?: Date | string | null;
   monitorName: string;
+  maxPrice?: number | null;
 }
 
 export interface NotificationResult {

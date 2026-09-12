@@ -1,5 +1,10 @@
 import type { DealPayload } from "./types";
 
+export function formatCompactEuro(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
 export function formatPrice(price: number, currency: string): string {
   const formatted = Number.isFinite(price)
     ? price.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
