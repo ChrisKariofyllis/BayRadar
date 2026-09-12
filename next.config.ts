@@ -29,6 +29,7 @@ const nextConfig: NextConfig = {
     "@prisma/adapter-libsql",
     "@prisma/client",
     "libsql",
+    "puppeteer-core",
   ],
 };
 

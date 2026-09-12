@@ -37,10 +37,22 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV DATABASE_URL=file:/app/prisma/data/bayradar.db
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-RUN apt-get update && apt-get install -y openssl ca-certificates tini gosu && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+    tini \
+    gosu \
+    chromium \
+    fonts-liberation \
+    fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 nodejs \
-  && useradd --system --uid 1001 --gid nodejs --home /nonexistent --shell /usr/sbin/nologin nextjs
+  && useradd --system --uid 1001 --gid nodejs --home /tmp --shell /usr/sbin/nologin nextjs \
+  && (test -x /usr/bin/chromium || ln -sf /usr/bin/chromium-browser /usr/bin/chromium) \
+  && test -x /usr/bin/chromium
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

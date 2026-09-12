@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "3050:3000"
+    shm_size: "1gb"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/data/bayradar.db
