@@ -36,6 +36,8 @@ function filterMonitor(
     ...partial,
     minPrice: partial.minPrice ?? null,
     aiVerify: partial.aiVerify ?? false,
+    telegramNotifications: true,
+    targetMarketValue: null,
   };
 }
 

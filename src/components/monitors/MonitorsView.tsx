@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { TelegramGlyph } from "@/components/icons/TelegramGlyph";
 import { MonitorFormModal } from "@/components/monitors/MonitorFormModal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
+import { cn } from "@/lib/cn";
 import { cronLabel, formatBuyingType, formatMonitorPriceRange, formatRelative, parseKeywords } from "@/lib/format-ui";
 import type { Monitor } from "@/lib/types";
 import { NEW_MONITOR_EVENT } from "@/lib/ui-events";
@@ -74,6 +76,30 @@ export function MonitorsView() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleTelegram(monitor: Monitor) {
+    const telegramNotifications = monitor.telegramNotifications === false;
+    setMonitors((current) =>
+      current.map((item) => (item.id === monitor.id ? { ...item, telegramNotifications } : item)),
+    );
+    try {
+      await api(`/api/monitors/${monitor.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ telegramNotifications }),
+      });
+    } catch (error) {
+      setMonitors((current) =>
+        current.map((item) =>
+          item.id === monitor.id ? { ...item, telegramNotifications: monitor.telegramNotifications } : item,
+        ),
+      );
+      push({
+        tone: "error",
+        title: "Could not update Telegram alerts",
+        description: error instanceof ApiError ? error.message : undefined,
+      });
     }
   }
 
@@ -175,6 +201,10 @@ export function MonitorsView() {
                     <td className="px-5 py-5 text-zinc-400">{formatRelative(monitor.lastRunAt)}</td>
                     <td className="px-5 py-5">
                       <div className="flex justify-end gap-1">
+                        <TelegramMuteButton
+                          enabled={monitor.telegramNotifications !== false}
+                          onClick={() => void toggleTelegram(monitor)}
+                        />
                         <Button variant="ghost" size="icon" onClick={() => setEditing(monitor)} aria-label="Edit">
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -222,6 +252,10 @@ export function MonitorsView() {
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-xs text-zinc-500">{formatRelative(monitor.lastRunAt)}</span>
                   <div className="flex gap-1">
+                    <TelegramMuteButton
+                      enabled={monitor.telegramNotifications !== false}
+                      onClick={() => void toggleTelegram(monitor)}
+                    />
                     <Button variant="ghost" size="icon" onClick={() => setEditing(monitor)} aria-label="Edit">
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -268,6 +302,28 @@ export function MonitorsView() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+function TelegramMuteButton({ enabled, onClick }: { enabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={enabled ? "Telegram notifications enabled (click to mute)" : "Telegram notifications muted (click to enable)"}
+      aria-label={enabled ? "Mute Telegram notifications" : "Enable Telegram notifications"}
+      className={cn(
+        "relative inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-colors",
+        enabled
+          ? "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
+          : "bg-white/[0.04] text-zinc-500 hover:bg-white/[0.08] hover:text-zinc-300",
+      )}
+    >
+      <TelegramGlyph className="h-4 w-4" />
+      {enabled ? null : (
+        <span className="pointer-events-none absolute inset-[11px] rotate-[-45deg] rounded-full border-t-2 border-zinc-500" />
+      )}
+    </button>
   );
 }
 

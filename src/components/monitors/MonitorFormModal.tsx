@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
+import { TelegramGlyph } from "@/components/icons/TelegramGlyph";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -25,6 +26,7 @@ export interface MonitorFormValues {
   negativeKeywords: string;
   cronSchedule: string;
   aiVerify: boolean;
+  telegramNotifications: boolean;
 }
 
 export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
@@ -39,6 +41,7 @@ export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
     negativeKeywords: monitor ? parseKeywordsInput(monitor.negativeKeywords) : "",
     cronSchedule: monitor?.cronSchedule ?? "*/15 * * * *",
     aiVerify: Boolean(monitor?.aiVerify),
+    telegramNotifications: monitor?.telegramNotifications !== false,
   };
 }
 
@@ -104,6 +107,7 @@ export function MonitorFormModal({
         .filter(Boolean),
       cronSchedule: values.cronSchedule,
       aiVerify: aiConfigured === false ? false : values.aiVerify,
+      telegramNotifications: values.telegramNotifications,
     });
   }
 
@@ -298,6 +302,25 @@ export function MonitorFormModal({
             disabled={aiConfigured === false}
             onCheckedChange={(aiVerify) => update("aiVerify", aiVerify)}
             label="AI Title Gatekeeper"
+          />
+        </div>
+        <div className="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#2AABEE]/20 text-[#2AABEE] ring-1 ring-[#2AABEE]/35">
+                <TelegramGlyph className="h-3.5 w-3.5" />
+              </span>
+              <Label>Send notifications to Telegram</Label>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              When off, this monitor still scans and saves deals, but Telegram alerts are skipped. Other channels keep
+              firing.
+            </p>
+          </div>
+          <Switch
+            checked={values.telegramNotifications}
+            onCheckedChange={(telegramNotifications) => update("telegramNotifications", telegramNotifications)}
+            label="Send notifications to Telegram"
           />
         </div>
         <Field label="Polling schedule">

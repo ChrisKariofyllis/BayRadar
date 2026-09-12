@@ -14,24 +14,26 @@ const cronScheduleSchema = z
   .min(1)
   .refine((value) => validateCron(value), { message: "Invalid cron expression" });
 
-const optionalMinPriceSchema = z.preprocess((value) => {
+const optionalPositiveAmountSchema = z.preprocess((value) => {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
   return value;
-}, z.union([z.null(), z.coerce.number().positive("minPrice must be greater than 0")]).optional());
+}, z.union([z.null(), z.coerce.number().positive()]).optional());
 
 export const createMonitorSchema = z
   .object({
     name: z.string().trim().min(1, "name is required"),
     query: z.string().trim().min(1, "query is required"),
     categoryId: z.string().trim().min(1).nullable().optional(),
-    minPrice: optionalMinPriceSchema,
+    minPrice: optionalPositiveAmountSchema,
     maxPrice: z.coerce.number().positive("maxPrice must be greater than 0"),
     buyingType: buyingTypeSchema.optional().default("ALL"),
     maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
     negativeKeywords: negativeKeywordsSchema,
     cronSchedule: cronScheduleSchema.optional().default("*/15 * * * *"),
     aiVerify: z.boolean().optional().default(false),
+    telegramNotifications: z.boolean().optional().default(true),
+    targetMarketValue: optionalPositiveAmountSchema,
     isActive: z.boolean().optional().default(true),
   })
   .refine((value) => value.minPrice == null || value.minPrice < value.maxPrice, {
@@ -44,13 +46,15 @@ export const updateMonitorSchema = z
     name: z.string().trim().min(1).optional(),
     query: z.string().trim().min(1).optional(),
     categoryId: z.string().trim().min(1).nullable().optional(),
-    minPrice: optionalMinPriceSchema,
+    minPrice: optionalPositiveAmountSchema,
     maxPrice: z.coerce.number().positive().optional(),
     buyingType: buyingTypeSchema.optional(),
     maxRemainingHours: z.coerce.number().int().positive().nullable().optional(),
     negativeKeywords: negativeKeywordsSchema,
     cronSchedule: cronScheduleSchema.optional(),
     aiVerify: z.boolean().optional(),
+    telegramNotifications: z.boolean().optional(),
+    targetMarketValue: optionalPositiveAmountSchema,
     isActive: z.boolean().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {

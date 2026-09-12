@@ -12,6 +12,11 @@ export interface DealPayload {
   endsAt?: Date | string | null;
   monitorName: string;
   maxPrice?: number | null;
+  estimatedFmv?: number | null;
+  discountPercent?: number | null;
+  idealoBWarePrice?: number | null;
+  idealoShopName?: string | null;
+  telegramNotifications?: boolean;
 }
 
 export interface NotificationResult {

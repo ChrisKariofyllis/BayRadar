@@ -13,6 +13,8 @@ export interface Monitor {
   negativeKeywords: string | null;
   cronSchedule: string;
   aiVerify: boolean;
+  telegramNotifications: boolean;
+  targetMarketValue: number | null;
   isActive: boolean;
   lastRunAt: string | null;
   createdAt: string;
@@ -44,6 +46,18 @@ export interface SeenListing {
   snipeTask?: ListingSnipe | null;
   activeSnipe?: ActiveSnipe | null;
   snipeOutcome?: SnipeOutcome | null;
+  estimatedFmv?: number | null;
+  discountPercent?: number | null;
+  arbitrage?: ListingArbitrage | null;
+  idealoBWarePrice?: number | null;
+  idealoShopName?: string | null;
+  idealoProductUrl?: string | null;
+}
+
+export interface ListingArbitrage {
+  estimatedFmv: number;
+  discountPercent: number;
+  estimatedProfit: number;
 }
 
 export type SnipeStatus = "PENDING" | "SCHEDULED" | "EXECUTING" | "SUCCESS" | "WON" | "OUTBID" | "FAILED" | "CANCELLED";

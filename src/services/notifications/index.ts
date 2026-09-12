@@ -27,7 +27,7 @@ const adapters: Record<
 
 export async function dispatchDealNotification(
   deal: DealPayload,
-  options?: { settingId?: string; includeDisabled?: boolean },
+  options?: { settingId?: string; includeDisabled?: boolean; skipTelegram?: boolean },
 ): Promise<NotificationResult[]> {
   const settings = await prisma.notificationSetting.findMany({
     where: options?.settingId
@@ -43,20 +43,35 @@ export async function dispatchDealNotification(
     return [];
   }
 
-  const settled = await Promise.allSettled(settings.map((setting) => dispatchToSetting(setting, deal)));
+  const dispatched = settings.filter((setting) => {
+    if (setting.provider === "TELEGRAM") {
+      if (options?.skipTelegram) return false;
+      if (deal.telegramNotifications === false) return false;
+    }
+    return true;
+  });
+
+  if (dispatched.length === 0) {
+    if (!options?.skipTelegram && deal.telegramNotifications === false) {
+      console.log(`[notify] Telegram muted for monitor; skipping Telegram alert: ${deal.title}`);
+    }
+    return [];
+  }
+
+  const settled = await Promise.allSettled(dispatched.map((setting) => dispatchToSetting(setting, deal)));
 
   return settled.map((result, index) => {
     if (result.status === "fulfilled") {
-      logResult(result.value, settings[index]);
+      logResult(result.value, dispatched[index]);
       return result.value;
     }
 
     const fallback: NotificationResult = {
       success: false,
-      provider: settings[index]?.provider ?? "UNKNOWN",
+      provider: dispatched[index]?.provider ?? "UNKNOWN",
       error: result.reason instanceof Error ? result.reason.message : String(result.reason),
     };
-    logResult(fallback, settings[index]);
+    logResult(fallback, dispatched[index]);
     return fallback;
   });
 }
