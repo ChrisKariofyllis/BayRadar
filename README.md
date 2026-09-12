@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
-[![Version](https://img.shields.io/badge/version-v1.1.0-orange)](./package.json)
+[![Version](https://img.shields.io/badge/version-v1.2.0-orange)](./package.json)
 
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
@@ -24,12 +24,14 @@ Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 - 🛂 **AI Title Gatekeeper** — Optional per-monitor deep check of listing titles before alerts, dropping replacement parts, accessories, empty boxes, and wrong sub-models. Evaluates candidates in batches, retries on 429s, then switches to a configured fallback model if the primary quota is exhausted. Caches accepts, AI rejects, and local-filter rejects so the same eBay item is not re-scored. If both models are out of quota, the scan keeps going with basic filters and warns in the banner. Understands German `mit OVP` vs empty packaging.
 - 🎛️ **AI Provider Presets** — One-click base URL and model chips in Settings for Gemini, Groq, OpenAI, OpenRouter, and Anthropic (via OpenRouter), plus a toggleable fallback model for rate-limit / daily-quota exhaustion.
 - 📡 **Live Scan Progress** — Trigger Scan streams fetch and AI inspection progress in a frosted banner, then refreshes the feed. Manual scans sweep up to 100 listings; cron sweeps 50.
-- 📊 **Deals Feed Sorting** — Sort saved matches by newest, oldest, price, or auction end time. Listing photos open the eBay item.
+- 📊 **Deals Feed Sorting** — Sort saved matches by newest, oldest, price, or auction end time.
+- 🖼️ **Listing Quick-View** — Tap a deal to inspect title, price, shipping, and countdown in a mobile bottom sheet or a centered desktop modal. **Open on eBay** stays a secondary action.
+- 🎯 **Gixen Last-Second Sniping** — Arm, update, or cancel a max bid from the feed. Gixen places the bid in the final seconds. Armed cards keep a **Sniped: €…** badge after refresh, and **Active Snipes** filters the feed to scheduled tasks.
 - 🧹 **Clear Feed** — One-click purge of saved deals when you want a clean rescan.
 - ⏱️ **Auction Time Windows** — Alert only on auctions entering their final hours (e.g. `<= 24h` remaining) to avoid bid inflation noise.
 - 📱 **Multi-Channel Push Alerts** — Native dispatchers for **Ntfy**, **Telegram**, **Discord**, and **Gotify** with direct eBay links and image previews.
 - 🧪 **Built-in Mock / Demo Engine** — Test the entire pipeline, filtering, and notifications immediately without waiting for eBay Developer key approval.
-- ⚙️ **In-App Credentials Manager** — Configure eBay keys, marketplace, and AI provider settings directly from the Web UI.
+- ⚙️ **In-App Credentials Manager** — Configure eBay keys, marketplace, AI provider, and optional Gixen sniping credentials directly from the Web UI.
 - 🐳 **Self-Hosted & Docker Native** — Single container packaging Next.js Dashboard + Background Poller Daemon with persistent SQLite storage.
 
 ---
@@ -72,6 +74,7 @@ You don't need active eBay API keys to start testing!
 5. Create a Monitor (e.g., PlayStation 5 @ €350) and click **Trigger Scan Now**. The mock engine will simulate deals and filter out scam boxes automatically. A live banner shows listings inspected; **Clear Feed** empties saved deals if you want a clean run.
 6. Optionally open **Settings → AI Configuration**, pick a provider chip (Gemini, Groq, OpenAI, OpenRouter, or Anthropic), paste an API key, and use **AI Smart Exclude** on a monitor to generate negative keywords. Leave **Enable Model Fallback** on so a lighter model can take over if the primary hits a 429.
 7. Enable **AI Title Gatekeeper** on a monitor to inspect titles before notifications. Verified deals show an **✨ AI Verified** chip on the feed. Sort the feed by price or ending time from the filter bar.
+8. To snipe auctions, open **Settings → Sniping / Gixen Configuration**, save your Gixen username/password, click **Test Connection**, then tap an auction on the feed and **Arm Snipe**. Use **Active Snipes** to review or cancel armed bids.
 
 ---
 
@@ -111,7 +114,7 @@ BayRadar uses local SQLite in Docker and remote [Turso](https://turso.tech) (lib
 
 Hobby Vercel crons run **once per day**. For a free 10-minute poller, add GitHub Actions secrets `VERCEL_DEPLOYMENT_URL` (your `https://….vercel.app`) and `CRON_SECRET` (same value as Vercel). The workflow in `.github/workflows/cron-poll.yml` POSTs to `/api/cron/poll` and no-ops until those secrets exist.
 
-> **Note:** High-precision sub-second sniping still requires the self-hosted Docker daemon.
+> **Note:** Gixen sniping runs from the app process (login + form post). Prefer the self-hosted Docker stack so session work is not cut off by a short serverless timeout.
 
 ---
 
@@ -135,8 +138,10 @@ npm run worker
 
 ## 🗺️ Roadmap
 
-- [ ] **Phase 7: Precision Auto-Sniper** (sub-second bids fired at T-6s before auction close).
-- [ ] **Telegram Interactive Bot:** 1-Click bidding via Telegram inline buttons when a deal is reported.
+- [x] **Phase 7: Gixen last-second sniping** — Arm, update, and cancel max bids from the deals feed via Gixen's web session (Gixen fires in the final seconds; BayRadar does not place eBay bids itself).
+- [ ] **Snipe outcome sync** — Pull Gixen win/outbid/failed status back onto the card after the auction ends.
+- [ ] **Native eBay bidding** — Optional in-app PlaceOffer path that does not depend on Gixen (requires eBay Trading / user OAuth).
+- [ ] **Telegram Interactive Bot:** 1-click bid or snipe actions from Telegram inline buttons when a deal is reported.
 - [ ] **Marketplace Arbitrage & Price Estimator:** Machine-learning valuation to estimate genuine discount percentages.
 
 ---
