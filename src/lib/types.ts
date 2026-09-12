@@ -43,14 +43,22 @@ export interface SeenListing {
   monitor: { id: string; name: string; buyingType?: BuyingType };
   snipeTask?: ListingSnipe | null;
   activeSnipe?: ActiveSnipe | null;
+  snipeOutcome?: SnipeOutcome | null;
 }
 
-export type SnipeStatus = "PENDING" | "SCHEDULED" | "EXECUTING" | "SUCCESS" | "OUTBID" | "FAILED" | "CANCELLED";
+export type SnipeStatus = "PENDING" | "SCHEDULED" | "EXECUTING" | "SUCCESS" | "WON" | "OUTBID" | "FAILED" | "CANCELLED";
 
 export interface ActiveSnipe {
   id: string;
   maxBid: number;
   status: string;
+}
+
+export interface SnipeOutcome {
+  id: string;
+  status: "WON" | "OUTBID" | "FAILED" | "CHECKING";
+  maxBid: number;
+  finalPrice?: number | null;
 }
 
 export interface ListingSnipe {
@@ -59,6 +67,7 @@ export interface ListingSnipe {
   maxBid: number;
   provider: string;
   providerSnipeId?: string | null;
+  finalPrice?: number | null;
   active?: boolean;
 }
 

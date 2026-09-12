@@ -74,6 +74,64 @@ export function isActiveSnipe(status?: string | null): boolean {
   return status === "PENDING" || status === "SCHEDULED" || status === "EXECUTING";
 }
 
+export function isWonSnipe(status?: string | null): boolean {
+  return status === "WON" || status === "SUCCESS";
+}
+
+export function isTerminalSnipe(status?: string | null): boolean {
+  return isWonSnipe(status) || status === "OUTBID" || status === "FAILED";
+}
+
+export function auctionHasEnded(endsAt?: string | Date | null): boolean {
+  if (!endsAt) return false;
+  const ms = endsAt instanceof Date ? endsAt.getTime() : Date.parse(String(endsAt));
+  return Number.isFinite(ms) && ms <= Date.now();
+}
+
+export type ListingSnipeState =
+  | { kind: "armed"; id: string; maxBid: number; status: string }
+  | { kind: "checking"; id: string; maxBid: number; status: string }
+  | { kind: "won"; id: string; maxBid: number; finalPrice?: number | null }
+  | { kind: "outbid"; id: string; maxBid: number; finalPrice?: number | null }
+  | { kind: "failed"; id: string; maxBid: number };
+
+export function listingSnipeState(listing: {
+  endsAt?: string | Date | null;
+  activeSnipe?: { id: string; maxBid: number; status: string } | null;
+  snipeOutcome?: { id: string; status: string; maxBid: number; finalPrice?: number | null } | null;
+  snipeTask?: {
+    id: string;
+    maxBid: number;
+    status: string;
+    active?: boolean | null;
+    finalPrice?: number | null;
+  } | null;
+}): ListingSnipeState | null {
+  const task = listing.snipeTask;
+  const outcome = listing.snipeOutcome;
+  const status = outcome?.status ?? task?.status;
+  const id = outcome?.id ?? task?.id ?? listing.activeSnipe?.id;
+  const maxBid = outcome?.maxBid ?? task?.maxBid ?? listing.activeSnipe?.maxBid;
+  if (!id || maxBid == null || !status) return null;
+
+  if (status === "CHECKING" || (isActiveSnipe(status) && auctionHasEnded(listing.endsAt))) {
+    return { kind: "checking", id, maxBid, status };
+  }
+  if (isWonSnipe(status)) {
+    return { kind: "won", id, maxBid, finalPrice: outcome?.finalPrice ?? task?.finalPrice };
+  }
+  if (status === "OUTBID") {
+    return { kind: "outbid", id, maxBid, finalPrice: outcome?.finalPrice ?? task?.finalPrice };
+  }
+  if (status === "FAILED") {
+    return { kind: "failed", id, maxBid };
+  }
+  if (isActiveSnipe(status) || listing.activeSnipe) {
+    return { kind: "armed", id, maxBid, status };
+  }
+  return null;
+}
+
 export function toActiveSnipe(task?: {
   id: string;
   maxBid: number;
@@ -86,11 +144,13 @@ export function toActiveSnipe(task?: {
 }
 
 export function listingActiveSnipe(listing: {
+  endsAt?: string | Date | null;
   activeSnipe?: { id: string; maxBid: number; status: string } | null;
   snipeTask?: { id: string; maxBid: number; status: string; active?: boolean | null } | null;
 }): { id: string; maxBid: number; status: string } | null {
-  if (listing.activeSnipe) return listing.activeSnipe;
-  return toActiveSnipe(listing.snipeTask);
+  const state = listingSnipeState(listing);
+  if (state?.kind !== "armed") return null;
+  return { id: state.id, maxBid: state.maxBid, status: state.status };
 }
 
 export function listingFormatLabel(buyingFormat?: string | null, format?: string | null): string {

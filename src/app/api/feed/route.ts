@@ -2,7 +2,7 @@ import type { Prisma, SnipeStatus } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
 import { jsonOk } from "@/lib/api";
-import { isActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
+import { auctionHasEnded, isActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,13 @@ export async function GET(request: Request) {
   }
   if (snipes === "active") {
     where.snipeTask = { status: { in: ACTIVE_SNIPE_STATUSES } };
+    where.OR = [{ endsAt: null }, { endsAt: { gt: new Date() } }];
+  }
+  if (snipes === "ended") {
+    where.OR = [
+      { snipeTask: { status: { in: ENDED_SNIPE_STATUSES } } },
+      { endsAt: { lte: new Date() }, snipeTask: { status: { in: ACTIVE_SNIPE_STATUSES } } },
+    ];
   }
 
   const listings = await prisma.seenListing.findMany({
@@ -39,21 +46,36 @@ export async function GET(request: Request) {
           maxBid: true,
           provider: true,
           providerSnipeId: true,
+          finalPrice: true,
         },
       },
     },
   });
 
-  const activeSnipeCount = await prisma.snipeTask.count({
-    where: {
-      status: { in: ACTIVE_SNIPE_STATUSES },
-      seenListing: { status: "ACCEPTED" },
-    },
-  });
+  const [activeSnipeCount, endedSnipeCount] = await Promise.all([
+    prisma.snipeTask.count({
+      where: {
+        status: { in: ACTIVE_SNIPE_STATUSES },
+        seenListing: { status: "ACCEPTED", OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] },
+      },
+    }),
+    prisma.snipeTask.count({
+      where: {
+        OR: [
+          { status: { in: ENDED_SNIPE_STATUSES }, seenListing: { status: "ACCEPTED" } },
+          {
+            status: { in: ACTIVE_SNIPE_STATUSES },
+            seenListing: { status: "ACCEPTED", endsAt: { lte: new Date() } },
+          },
+        ],
+      },
+    }),
+  ]);
 
   return jsonOk({
     listings: sortListings(listings, sort).slice(0, limit).map(toFeedListing),
     activeSnipeCount,
+    endedSnipeCount,
   });
 }
 
@@ -63,23 +85,50 @@ export async function DELETE() {
 }
 
 const ACTIVE_SNIPE_STATUSES: SnipeStatus[] = ["PENDING", "SCHEDULED", "EXECUTING"];
+const ENDED_SNIPE_STATUSES: SnipeStatus[] = ["WON", "SUCCESS", "OUTBID", "FAILED"];
 
 function toFeedListing<T extends {
+  endsAt?: Date | string | null;
   snipeTask?: {
     id: string;
     status: SnipeStatus;
     maxBid: number;
     provider: string;
     providerSnipeId?: string | null;
+    finalPrice?: number | null;
   } | null;
 }>(listing: T) {
   const task = listing.snipeTask ?? null;
-  const active = Boolean(task && isActiveSnipe(task.status));
+  const ended = auctionHasEnded(listing.endsAt);
+  const active = Boolean(task && isActiveSnipe(task.status) && !ended);
   return {
     ...listing,
     snipeTask: task ? { ...task, active } : null,
-    activeSnipe: toActiveSnipe(task),
+    activeSnipe: active ? toActiveSnipe({ ...task!, active: true }) : null,
+    snipeOutcome: toSnipeOutcome(task, ended),
   };
+}
+
+function toSnipeOutcome(
+  task: {
+    id: string;
+    status: SnipeStatus;
+    maxBid: number;
+    finalPrice?: number | null;
+  } | null,
+  ended: boolean,
+) {
+  if (!task) return null;
+  if (task.status === "WON" || task.status === "SUCCESS") {
+    return { id: task.id, status: "WON" as const, maxBid: task.maxBid, finalPrice: task.finalPrice ?? null };
+  }
+  if (task.status === "OUTBID" || task.status === "FAILED") {
+    return { id: task.id, status: task.status, maxBid: task.maxBid, finalPrice: task.finalPrice ?? null };
+  }
+  if (ended && isActiveSnipe(task.status)) {
+    return { id: task.id, status: "CHECKING" as const, maxBid: task.maxBid, finalPrice: null };
+  }
+  return null;
 }
 
 type FeedSort = "newest" | "oldest" | "price_asc" | "price_desc" | "ending_soon" | "ending_late";
