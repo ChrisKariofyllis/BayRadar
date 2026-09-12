@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { AiSettingsCard } from "@/components/settings/AiSettingsCard";
 import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
+import { GixenSettingsCard } from "@/components/settings/GixenSettingsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -197,13 +198,18 @@ export function SettingsView() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Settings</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          eBay credentials, AI exclusions, notification channels, and system status.
+          eBay credentials, Gixen sniping, AI exclusions, notification channels, and system status.
         </p>
       </div>
 
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">eBay integration</h2>
         <EbaySettingsCard />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Sniping / Gixen</h2>
+        <GixenSettingsCard />
       </section>
 
       <section className="space-y-2">
@@ -294,7 +300,7 @@ export function SettingsView() {
 
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">System status</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card className="divide-y divide-white/[0.06] p-0">
             <div className="p-5">
             <h3 className="font-medium text-zinc-50">eBay API</h3>
@@ -344,6 +350,23 @@ export function SettingsView() {
                 <dd className="truncate text-zinc-200">{status?.ai?.baseUrl ?? "—"}</dd>
               </div>
             </dl>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-medium text-zinc-50">Gixen sniping</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Last-second bids are submitted to Gixen, not placed by BayRadar.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge tone={status?.gixen?.enabled && status.gixen.handshakeOk ? "success" : status?.gixen?.configured ? "warning" : "neutral"}>
+                {status?.gixen?.enabled && status.gixen.handshakeOk
+                  ? status.gixen.mirrorActive
+                    ? "Ready · Mirror"
+                    : "Ready"
+                  : status?.gixen?.configured
+                    ? "Handshake required"
+                    : "Not configured"}
+              </Badge>
+            </div>
           </Card>
           <Card className="p-5">
             <h3 className="font-medium text-zinc-50">Poller mode</h3>
