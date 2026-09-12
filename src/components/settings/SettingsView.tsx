@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { AiSettingsCard } from "@/components/settings/AiSettingsCard";
 import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
+import { ExperimentalSettingsCard } from "@/components/settings/ExperimentalSettingsCard";
 import { GixenSettingsCard } from "@/components/settings/GixenSettingsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -198,7 +199,7 @@ export function SettingsView() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Settings</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          eBay credentials, Gixen sniping, AI exclusions, notification channels, and system status.
+          eBay credentials, Gixen sniping, AI exclusions, experimental valuation, notification channels, and system status.
         </p>
       </div>
 
@@ -215,6 +216,11 @@ export function SettingsView() {
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">AI configuration</h2>
         <AiSettingsCard />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">🧪 Experimental Features</h2>
+        <ExperimentalSettingsCard />
       </section>
 
       <section className="space-y-2">

@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { DEFAULT_AI_BASE_URL, DEFAULT_AI_FALLBACK_MODEL, DEFAULT_AI_MODEL } from "@/lib/ai-defaults";
+import { DEFAULT_MIN_ARBITRAGE_DISCOUNT, MIN_ARBITRAGE_DISCOUNT_RANGE } from "@/lib/valuation/defaults";
 
 export async function getConfigValue(key: string): Promise<string | undefined> {
   const row = await prisma.systemConfig.findUnique({
@@ -86,6 +87,26 @@ export async function getGixenRuntimeConfig() {
     sessionCookie: row?.sessionCookie?.trim() || "",
     sessionId: row?.sessionId?.trim() || "",
   };
+}
+
+export async function getEstimatorRuntimeConfig() {
+  const row = await prisma.aiSettings.findUnique({
+    where: { id: "default" },
+    select: { priceEstimatorEnabled: true, minArbitrageDiscount: true },
+  });
+
+  return {
+    enabled: Boolean(row?.priceEstimatorEnabled),
+    minDiscount: clampArbitrageDiscount(row?.minArbitrageDiscount),
+  };
+}
+
+export function clampArbitrageDiscount(value: number | null | undefined): number {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : DEFAULT_MIN_ARBITRAGE_DISCOUNT;
+  return Math.min(
+    MIN_ARBITRAGE_DISCOUNT_RANGE.max,
+    Math.max(MIN_ARBITRAGE_DISCOUNT_RANGE.min, parsed),
+  );
 }
 
 export function isLocalAiEndpoint(baseUrl: string): boolean {
