@@ -42,7 +42,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-white/[0.08] bg-[#18181b] p-5 shadow-2xl ring-1 ring-white/10 sm:max-w-xl sm:rounded-2xl",
+          "relative z-10 max-h-[85vh] w-full overflow-y-auto rounded-t-2xl border border-white/[0.08] bg-[#18181b] p-5 shadow-2xl ring-1 ring-white/10 sm:max-w-xl sm:rounded-2xl",
           className,
         )}
       >
