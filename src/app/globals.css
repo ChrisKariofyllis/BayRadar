@@ -52,6 +52,17 @@ body {
   -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 55%, transparent 100%);
 }
 
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes radar-pulse {
   0%,
   100% {

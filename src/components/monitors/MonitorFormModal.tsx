@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { ChevronRight, LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { TelegramGlyph } from "@/components/icons/TelegramGlyph";
@@ -111,13 +111,13 @@ export function MonitorFormModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const nextErrors = validate(values);
+    const nextErrors = validate(values, syncQueryWithName);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     await onSubmit({
       name: values.name.trim(),
-      query: values.query.trim(),
+      query: (syncQueryWithName ? values.name : values.query).trim(),
       categoryId: values.categoryId.trim() || null,
       minPrice: values.minPrice.trim() ? Number(values.minPrice) : null,
       maxPrice: Number(values.maxPrice),
@@ -135,8 +135,14 @@ export function MonitorFormModal({
   }
 
   async function suggestNegatives() {
-    if (!values.query.trim()) {
-      setErrors((current) => ({ ...current, query: "Enter a search query before generating exclusions." }));
+    const query = (syncQueryWithName ? values.name : values.query).trim();
+    if (!query) {
+      setErrors((current) => ({
+        ...current,
+        ...(syncQueryWithName
+          ? { name: "Enter a monitor name before generating exclusions." }
+          : { query: "Enter a search query before generating exclusions." }),
+      }));
       return;
     }
 
@@ -153,7 +159,7 @@ export function MonitorFormModal({
       const result = await api<{ keywords: string[] }>("/api/ai/suggest-negatives", {
         method: "POST",
         body: JSON.stringify({
-          query: values.query.trim(),
+          query,
           marketplaceId,
           minPrice: minPrice && Number.isFinite(minPrice) ? minPrice : undefined,
           maxPrice: maxPrice && Number.isFinite(maxPrice) ? maxPrice : undefined,
@@ -187,14 +193,18 @@ export function MonitorFormModal({
   }
 
   async function fetchIdealoRefurbPrice() {
-    const query = values.query.trim() || values.name.trim();
+    const query = (syncQueryWithName ? values.name : values.query).trim();
     if (!query) {
-      setErrors((current) => ({ ...current, query: "Enter a search query before fetching Idealo prices." }));
+      setErrors((current) => ({
+        ...current,
+        ...(syncQueryWithName
+          ? { name: "Enter a monitor name before fetching Idealo prices." }
+          : { query: "Enter a search query before fetching Idealo prices." }),
+      }));
       return;
     }
 
     setFetchingIdealo(true);
-    setIdealoHint("Searching Idealo B-Ware...");
     try {
       const result = await api<{
         success: boolean;
@@ -219,7 +229,7 @@ export function MonitorFormModal({
         targetMarketValue: String(price),
         maxPrice: current.maxPrice.trim() ? current.maxPrice : String(suggestedMax),
       }));
-      setIdealoHint(`Found on Idealo B-Ware: €${formatEuroAmount(price)} (${result.shop} - ${result.title})`);
+      setIdealoHint(`Idealo: €${formatEuroAmount(price)} • ${result.shop}`);
       push({
         tone: "success",
         title: "Idealo B-Ware price found",
@@ -239,42 +249,42 @@ export function MonitorFormModal({
       open={open}
       onClose={onClose}
       title={editing ? "Edit monitor" : "Create monitor"}
-      description="Define the eBay search, price range, and filters BayRadar should watch."
+      description="Search, price range, and filters."
     >
-      <form className="grid gap-4" onSubmit={handleSubmit}>
-        <Field label="Monitor name" error={errors.name}>
+      <form className="grid gap-3" onSubmit={handleSubmit}>
+        <Field
+          label="Monitor name"
+          error={errors.name || (syncQueryWithName ? errors.query : undefined)}
+          labelRight={
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs font-normal text-zinc-400">
+              <input
+                type="checkbox"
+                checked={syncQueryWithName}
+                onChange={(event) => toggleSyncQuery(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border-white/20 bg-zinc-950 text-sky-400 accent-sky-400"
+              />
+              Use name as search query
+            </label>
+          }
+        >
           <Input
             value={values.name}
             onChange={(event) => update("name", event.target.value)}
             placeholder='PS5 Digital under 350€'
           />
         </Field>
-        <Field label="Search query" error={errors.query}>
-          <Input
-            value={values.query}
-            onChange={(event) => update("query", event.target.value)}
-            placeholder="PS5 Digital Edition"
-            disabled={syncQueryWithName}
-            className="disabled:cursor-not-allowed disabled:opacity-60"
-          />
-          <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
-            <input
-              type="checkbox"
-              checked={syncQueryWithName}
-              onChange={(event) => toggleSyncQuery(event.target.checked)}
-              className="h-3.5 w-3.5 rounded border-white/20 bg-zinc-950 text-sky-400 accent-sky-400"
-            />
-            Search query same as monitor name
-          </label>
-        </Field>
-        <Field label="Category ID (optional)">
-          <Input
-            value={values.categoryId}
-            onChange={(event) => update("categoryId", event.target.value)}
-            placeholder="139973"
-          />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
+        {!syncQueryWithName ? (
+          <div className="grid motion-safe:animate-[fadeSlide_180ms_ease-out]">
+            <Field label="Search query" error={errors.query}>
+              <Input
+                value={values.query}
+                onChange={(event) => update("query", event.target.value)}
+                placeholder="PS5 Digital Edition"
+              />
+            </Field>
+          </div>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Min Price (€)" error={errors.minPrice}>
             <Input
               type="number"
@@ -296,48 +306,29 @@ export function MonitorFormModal({
             />
           </Field>
         </div>
-        <Field label="Estimated Market / Resale Value (€) (Optional)" error={errors.targetMarketValue}>
-          <Input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={values.targetMarketValue}
-            onChange={(event) => update("targetMarketValue", event.target.value)}
-            placeholder="e.g. 320"
-          />
-          <button
-            type="button"
-            onClick={() => void fetchIdealoRefurbPrice()}
-            disabled={fetchingIdealo}
-            className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-xs font-medium text-sky-100 transition-colors hover:bg-sky-400/15 disabled:opacity-60"
-          >
-            {fetchingIdealo ? <LoaderCircle className="h-3 w-3 animate-spin" /> : "🔍"}
-            {fetchingIdealo ? "Searching Idealo B-Ware..." : "Fetch Idealo Refurb Price"}
-          </button>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-            {idealoHint ??
-              "If set, arbitrage margins will be calculated against this exact baseline instead of AI estimation."}
-          </p>
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Buying type">
-            <Select value={values.buyingType} onChange={(event) => update("buyingType", event.target.value as BuyingType)}>
-              <option value="ALL">ALL</option>
-              <option value="AUCTION">AUCTION</option>
-              <option value="FIXED_PRICE">FIXED_PRICE</option>
-            </Select>
-          </Field>
-          <Field label="Max remaining auction hours" error={errors.maxRemainingHours}>
+        <Field label="Market Value / Baseline (€)" error={errors.targetMarketValue}>
+          <div className="flex items-center gap-2">
             <Input
               type="number"
-              min="1"
-              step="1"
-              value={values.maxRemainingHours}
-              onChange={(event) => update("maxRemainingHours", event.target.value)}
-              placeholder="24"
+              min="0.01"
+              step="0.01"
+              value={values.targetMarketValue}
+              onChange={(event) => update("targetMarketValue", event.target.value)}
+              placeholder="e.g. 450"
+              className="w-[120px] shrink-0"
             />
-          </Field>
-        </div>
+            <button
+              type="button"
+              onClick={() => void fetchIdealoRefurbPrice()}
+              disabled={fetchingIdealo}
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-sky-400/25 bg-sky-400/10 px-2.5 text-xs font-medium text-sky-100 transition-colors hover:bg-sky-400/15 disabled:opacity-60"
+            >
+              {fetchingIdealo ? <LoaderCircle className="h-3 w-3 animate-spin" /> : "🔍"}
+              {fetchingIdealo ? "Searching…" : "Fetch Idealo Refurb"}
+            </button>
+          </div>
+          {idealoHint ? <p className="text-xs leading-relaxed text-zinc-400">{idealoHint}</p> : null}
+        </Field>
         <Field label="Negative keywords" error={errors.negativeKeywords}>
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <button
@@ -373,33 +364,20 @@ export function MonitorFormModal({
           />
         </Field>
         <div
-          className="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4"
+          className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2"
           title={
             aiConfigured === false
               ? "Configure an AI provider in Settings to enable the title gatekeeper."
               : undefined
           }
         >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Label>AI Title Gatekeeper</Label>
-              <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200">
-                <Sparkles className="h-3 w-3" />
-                AI
-              </span>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              Uses AI to inspect every listing title before sending notifications to eliminate replacement screens, wrong
-              sub-models, and accessories.
-            </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+            <Label>AI Title Gatekeeper</Label>
             {aiConfigured === false ? (
-              <p className="mt-2 text-xs text-zinc-500">
-                Enable this after adding a provider in{" "}
-                <Link href="/settings" className="text-amber-300 underline-offset-2 hover:underline">
-                  Settings
-                </Link>
-                .
-              </p>
+              <Link href="/settings" className="truncate text-xs text-zinc-500 underline-offset-2 hover:underline">
+                Set up AI
+              </Link>
             ) : null}
           </div>
           <Switch
@@ -409,18 +387,12 @@ export function MonitorFormModal({
             label="AI Title Gatekeeper"
           />
         </div>
-        <div className="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#2AABEE]/20 text-[#2AABEE] ring-1 ring-[#2AABEE]/35">
-                <TelegramGlyph className="h-3.5 w-3.5" />
-              </span>
-              <Label>Send notifications to Telegram</Label>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              When off, this monitor still scans and saves deals, but Telegram alerts are skipped. Other channels keep
-              firing.
-            </p>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#2AABEE]/20 text-[#2AABEE] ring-1 ring-[#2AABEE]/35">
+              <TelegramGlyph className="h-3 w-3" />
+            </span>
+            <Label>Send notifications to Telegram</Label>
           </div>
           <Switch
             checked={values.telegramNotifications}
@@ -428,19 +400,53 @@ export function MonitorFormModal({
             label="Send notifications to Telegram"
           />
         </div>
-        <Field label="Polling schedule">
-          <Select value={values.cronSchedule} onChange={(event) => update("cronSchedule", event.target.value)}>
-            {CRON_PRESETS.map((preset) => (
-              <option key={preset.value} value={preset.value}>
-                {preset.label}
-              </option>
-            ))}
-            {CRON_PRESETS.some((preset) => preset.value === values.cronSchedule) ? null : (
-              <option value={values.cronSchedule}>{values.cronSchedule}</option>
-            )}
-          </Select>
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
+        <details key={monitor?.id ?? "create"} className="group rounded-xl border border-white/[0.08] bg-white/[0.02]">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-zinc-500 marker:content-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            ⚙️ Advanced options
+          </summary>
+          <div className="grid gap-3 border-t border-white/[0.06] px-3 py-3">
+            <Field label="Category ID (optional)">
+              <Input
+                value={values.categoryId}
+                onChange={(event) => update("categoryId", event.target.value)}
+                placeholder="139973"
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Buying type">
+                <Select value={values.buyingType} onChange={(event) => update("buyingType", event.target.value as BuyingType)}>
+                  <option value="ALL">ALL</option>
+                  <option value="AUCTION">AUCTION</option>
+                  <option value="FIXED_PRICE">FIXED_PRICE</option>
+                </Select>
+              </Field>
+              <Field label="Max remaining auction hours" error={errors.maxRemainingHours}>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={values.maxRemainingHours}
+                  onChange={(event) => update("maxRemainingHours", event.target.value)}
+                  placeholder="24"
+                />
+              </Field>
+            </div>
+            <Field label="Polling schedule">
+              <Select value={values.cronSchedule} onChange={(event) => update("cronSchedule", event.target.value)}>
+                {CRON_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+                {CRON_PRESETS.some((preset) => preset.value === values.cronSchedule) ? null : (
+                  <option value={values.cronSchedule}>{values.cronSchedule}</option>
+                )}
+              </Select>
+            </Field>
+          </div>
+        </details>
+        <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -457,24 +463,29 @@ function Field({
   label,
   error,
   children,
+  labelRight,
 }: {
   label: string;
   error?: string;
   children: ReactNode;
+  labelRight?: ReactNode;
 }) {
   return (
     <div className="grid gap-1.5">
-      <Label>{label}</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        {labelRight}
+      </div>
       {children}
       <FieldError message={error} />
     </div>
   );
 }
 
-function validate(values: MonitorFormValues): Record<string, string> {
+function validate(values: MonitorFormValues, syncQueryWithName: boolean): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!values.name.trim()) errors.name = "Name is required.";
-  if (!values.query.trim()) errors.query = "Search query is required.";
+  if (!syncQueryWithName && !values.query.trim()) errors.query = "Search query is required.";
   const price = Number(values.maxPrice);
   if (!values.maxPrice || !Number.isFinite(price) || price <= 0) {
     errors.maxPrice = "Enter a price greater than 0.";
