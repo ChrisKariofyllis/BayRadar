@@ -1,16 +1,18 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Crosshair, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { DealCard } from "@/components/feed/DealCard";
+import { DealQuickView } from "@/components/feed/DealQuickView";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
-import type { Monitor, SeenListing } from "@/lib/types";
+import { listingActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
+import type { ListingSnipe, Monitor, SeenListing } from "@/lib/types";
 import { isScanRunning, useScanProgress } from "@/lib/use-scan-progress";
 
 export function FeedView() {
@@ -26,6 +28,10 @@ export function FeedView() {
   const [sort, setSort] = useState("newest");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusBid, setFocusBid] = useState(false);
+  const [view, setView] = useState<"all" | "snipes">("all");
+  const [snipeCount, setSnipeCount] = useState(0);
 
   useEffect(() => {
     api<{ monitors: Monitor[] }>("/api/monitors")
@@ -44,9 +50,13 @@ export function FeedView() {
     if (format) params.set("format", format);
     if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (view === "snipes") params.set("snipes", "active");
     setLoading(true);
-    api<{ listings: SeenListing[] }>(`/api/feed?${params.toString()}`)
-      .then((data) => setListings(data.listings))
+    api<{ listings: SeenListing[]; activeSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+      .then((data) => {
+        setListings(data.listings);
+        if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
+      })
       .catch((error) => {
         push({
           tone: "error",
@@ -55,7 +65,7 @@ export function FeedView() {
         });
       })
       .finally(() => setLoading(false));
-  }, [monitorId, format, sort, debouncedQuery, push]);
+  }, [monitorId, format, sort, debouncedQuery, view, push]);
 
   useEffect(() => {
     if (scan.status === "idle") return;
@@ -64,10 +74,14 @@ export function FeedView() {
     if (format) params.set("format", format);
     if (sort) params.set("sort", sort);
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (view === "snipes") params.set("snipes", "active");
 
     const refresh = () => {
-      api<{ listings: SeenListing[] }>(`/api/feed?${params.toString()}`)
-        .then((data) => setListings(data.listings))
+      api<{ listings: SeenListing[]; activeSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+        .then((data) => {
+          setListings(data.listings);
+          if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
+        })
         .catch(() => undefined);
     };
 
@@ -75,9 +89,38 @@ export function FeedView() {
     if (!isScanRunning(scan)) return;
     const interval = window.setInterval(refresh, 2500);
     return () => window.clearInterval(interval);
-  }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt, sort]);
+  }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt, sort, view]);
 
-  const empty = useMemo(() => !loading && listings.length === 0, [loading, listings.length]);
+  const visible = useMemo(
+    () => (view === "snipes" ? listings.filter((listing) => listingActiveSnipe(listing)) : listings),
+    [listings, view],
+  );
+  const empty = useMemo(() => !loading && visible.length === 0, [loading, visible.length]);
+  const selected = listings.find((listing) => listing.id === selectedId) ?? visible.find((listing) => listing.id === selectedId) ?? null;
+
+  function openListing(listing: SeenListing, intent?: "snipe") {
+    setSelectedId(listing.id);
+    setFocusBid(intent === "snipe");
+  }
+
+  function closeListing() {
+    setSelectedId(null);
+    setFocusBid(false);
+  }
+
+  function handleSnipeUpdated(listingId: string, snipe: ListingSnipe | null) {
+    setListings((current) => {
+      const previous = current.find((listing) => listing.id === listingId);
+      const wasActive = Boolean(previous && listingActiveSnipe(previous));
+      const nextActive = toActiveSnipe(snipe);
+      if (wasActive !== Boolean(nextActive)) {
+        setSnipeCount((count) => Math.max(0, count + (nextActive ? 1 : -1)));
+      }
+      return current.map((listing) =>
+        listing.id === listingId ? { ...listing, snipeTask: snipe, activeSnipe: nextActive } : listing,
+      );
+    });
+  }
 
   async function clearFeed() {
     setClearing(true);
@@ -120,6 +163,39 @@ export function FeedView() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setView("all")}
+          className={`inline-flex h-9 items-center rounded-full px-3 text-sm font-medium transition-colors ${
+            view === "all"
+              ? "bg-amber-400 text-zinc-950"
+              : "border border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
+          }`}
+        >
+          All Deals
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("snipes")}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors ${
+            view === "snipes"
+              ? "bg-amber-400 text-zinc-950"
+              : "border border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
+          }`}
+        >
+          <Crosshair className="h-3.5 w-3.5" />
+          Active Snipes
+          <span
+            className={`rounded-full px-1.5 text-xs tabular-nums ${
+              view === "snipes" ? "bg-zinc-950/15" : "bg-white/10 text-zinc-200"
+            }`}
+          >
+            {snipeCount}
+          </span>
+        </button>
+      </div>
+
       <Card className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
         <Select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} aria-label="Filter by monitor">
           <option value="">All monitors</option>
@@ -153,15 +229,25 @@ export function FeedView() {
       {loading ? <p className="text-sm text-zinc-500">Loading deals…</p> : null}
       {empty ? (
         <Card className="p-8 text-center text-sm text-zinc-400">
-          No deals yet. Run a scan after creating an active monitor.
+          {view === "snipes"
+            ? "No active snipes scheduled yet."
+            : "No deals yet. Run a scan after creating an active monitor."}
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {listings.map((listing) => (
-            <DealCard key={listing.id} listing={listing} />
+          {visible.map((listing) => (
+            <DealCard key={listing.id} listing={listing} onOpen={openListing} />
           ))}
         </div>
       )}
+
+      <DealQuickView
+        listing={selected}
+        open={Boolean(selectedId)}
+        focusBid={focusBid}
+        onClose={closeListing}
+        onSnipeUpdated={handleSnipeUpdated}
+      />
 
       <Modal
         open={confirmClear}

@@ -1,7 +1,8 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, SnipeStatus } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
 import { jsonOk } from "@/lib/api";
+import { isActiveSnipe, toActiveSnipe } from "@/lib/format-ui";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export async function GET(request: Request) {
   const monitorId = searchParams.get("monitorId")?.trim() || undefined;
   const format = searchParams.get("format")?.trim().toUpperCase() || undefined;
   const q = searchParams.get("q")?.trim() || undefined;
+  const snipes = searchParams.get("snipes")?.trim().toLowerCase() || undefined;
   const sort = parseSort(searchParams.get("sort"));
   const limit = clampLimit(Number(searchParams.get("limit") ?? 80));
 
@@ -20,22 +22,64 @@ export async function GET(request: Request) {
   if (format === "AUCTION" || format === "FIXED_PRICE") {
     where.buyingFormat = { contains: format };
   }
+  if (snipes === "active") {
+    where.snipeTask = { status: { in: ACTIVE_SNIPE_STATUSES } };
+  }
 
   const listings = await prisma.seenListing.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 500,
     include: {
-      monitor: { select: { id: true, name: true } },
+      monitor: { select: { id: true, name: true, buyingType: true } },
+      snipeTask: {
+        select: {
+          id: true,
+          status: true,
+          maxBid: true,
+          provider: true,
+          providerSnipeId: true,
+        },
+      },
     },
   });
 
-  return jsonOk({ listings: sortListings(listings, sort).slice(0, limit) });
+  const activeSnipeCount = await prisma.snipeTask.count({
+    where: {
+      status: { in: ACTIVE_SNIPE_STATUSES },
+      seenListing: { status: "ACCEPTED" },
+    },
+  });
+
+  return jsonOk({
+    listings: sortListings(listings, sort).slice(0, limit).map(toFeedListing),
+    activeSnipeCount,
+  });
 }
 
 export async function DELETE() {
   const deleted = await prisma.seenListing.deleteMany({});
   return jsonOk({ success: true, count: deleted.count });
+}
+
+const ACTIVE_SNIPE_STATUSES: SnipeStatus[] = ["PENDING", "SCHEDULED", "EXECUTING"];
+
+function toFeedListing<T extends {
+  snipeTask?: {
+    id: string;
+    status: SnipeStatus;
+    maxBid: number;
+    provider: string;
+    providerSnipeId?: string | null;
+  } | null;
+}>(listing: T) {
+  const task = listing.snipeTask ?? null;
+  const active = Boolean(task && isActiveSnipe(task.status));
+  return {
+    ...listing,
+    snipeTask: task ? { ...task, active } : null,
+    activeSnipe: toActiveSnipe(task),
+  };
 }
 
 type FeedSort = "newest" | "oldest" | "price_asc" | "price_desc" | "ending_soon" | "ending_late";
