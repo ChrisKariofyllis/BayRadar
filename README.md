@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
-[![Version](https://img.shields.io/badge/version-v1.4.0-orange)](./package.json)
+[![Version](https://img.shields.io/badge/version-v1.4.1-orange)](./package.json)
 
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
@@ -31,7 +31,7 @@ Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 - ⏱️ **Auction Time Windows** — Alert only on auctions entering their final hours (e.g. `<= 24h` remaining) to avoid bid inflation noise.
 - 📱 **Multi-Channel Push Alerts** — Native dispatchers for **Ntfy**, **Telegram**, **Discord**, and **Gotify** with direct eBay links and image previews.
 - 🤖 **Telegram Interactive Bot** — Auction alerts include cap / +€50 / +€100 / custom-bid buttons. Authorized chats can arm a Gixen snipe from Telegram without opening the dashboard, `/load` recent deals, and mute Telegram per monitor while other channels keep firing.
-- 🏷️ **Idealo B-Ware Market Value** — From Create/Edit Monitor, fetch the current Idealo **B-Ware & Gebraucht** price for the query, fill **Estimated Market / Resale Value**, and optionally suggest a max price ~20% below that reference. Scans compare landed eBay cost against that baseline and only show the fire-badge discount when it is a real margin.
+- 🏷️ **Idealo B-Ware Market Value** — From Create/Edit Monitor, fetch the current Idealo **B-Ware & Gebraucht** price for the query, fill **Market Value / Baseline**, and optionally suggest a max price ~20% below that reference. The lookup prefers camera **Body / Gehäuse** over lens kits and walks color/storage variants for the true lowest used offer. Scans compare landed eBay cost against that baseline and only show the fire-badge discount when it is a real margin.
 - 🧪 **Built-in Mock / Demo Engine** — Test the entire pipeline, filtering, and notifications immediately without waiting for eBay Developer key approval.
 - ⚙️ **In-App Credentials Manager** — Configure eBay keys, marketplace, AI provider, and optional Gixen sniping credentials directly from the Web UI.
 - 🐳 **Self-Hosted & Docker Native** — Single container packaging Next.js Dashboard + Background Poller Daemon with persistent SQLite storage.
@@ -77,7 +77,7 @@ You don't need active eBay API keys to start testing!
 6. Optionally open **Settings → AI Configuration**, pick a provider chip (Gemini, Groq, OpenAI, OpenRouter, or Anthropic), paste an API key, and use **AI Smart Exclude** on a monitor to generate negative keywords. Leave **Enable Model Fallback** on so a lighter model can take over if the primary hits a 429.
 7. Enable **AI Title Gatekeeper** on a monitor to inspect titles before notifications. Verified deals show an **✨ AI Verified** chip on the feed. Sort the feed by price or ending time from the filter bar.
 8. To snipe auctions, open **Settings → Sniping / Gixen Configuration**, save your Gixen username/password, click **Test Connection**, then tap an auction on the feed and **Arm Snipe**. Use **Active Snipes** to review or cancel armed bids, and **Ended Snipes** after the auction to see won / outbid / failed. Telegram auction alerts also expose the same arming actions via inline buttons (authorized chat ID only).
-9. When creating a monitor, click **Fetch Idealo Refurb Price** after entering a query such as `iPhone 13 256 gb`. BayRadar opens Idealo in headless Chromium, clicks **B-Ware & Gebraucht**, and fills the estimated market value with the lowest matching used offer. Turn on **Experimental Features** in Settings if you also want heuristic FMV when a monitor has no Idealo/manual baseline.
+9. When creating a monitor, optionally check **Use name as search query**, then click **Fetch Idealo Refurb**. Queries such as `Sony Alpha 6700` resolve to the body-only product, and `iPhone 15 Pro 256 gb` walks color SKUs for the lowest matching B-Ware price. Turn on **Experimental Features** in Settings if you also want heuristic FMV when a monitor has no Idealo/manual baseline.
 
 ---
 
@@ -144,7 +144,7 @@ npm run worker
 - [x] **Phase 7: Gixen last-second sniping** — Arm, update, and cancel max bids from the deals feed via Gixen's web session (Gixen fires in the final seconds; BayRadar does not place eBay bids itself).
 - [x] **Snipe outcome sync** — Pull Gixen win/outbid/failed status back onto the card after the auction ends.
 - [x] **Telegram Interactive Bot** — 1-click snipe actions from Telegram inline buttons when an auction is reported, including a custom max-bid reply, `/load`, and per-monitor Telegram mute.
-- [x] **Idealo B-Ware market value** — On-demand Idealo B-Ware search sets the current refurbished market price as the monitor baseline, then the feed only flags a deal when landed cost beats that number.
+- [x] **Idealo B-Ware market value** — On-demand Idealo B-Ware search sets the current refurbished market price as the monitor baseline (body-only cameras, lowest matching color/storage SKU), then the feed only flags a deal when landed cost beats that number.
 
 ---
 
