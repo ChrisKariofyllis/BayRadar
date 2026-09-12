@@ -3,7 +3,15 @@ import type { Monitor } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
 import { verifyListingsBatch, type BatchItemCandidate } from "@/lib/ai/gatekeeper";
-import { getEbayRuntimeConfig } from "@/services/config";
+import {
+  createValuationBudget,
+  enrichListingValuation,
+  resolveTargetMarketValue,
+  valuationFromFmv,
+  type ListingEnrichment,
+  type ValuationBudget,
+} from "@/lib/valuation/estimator";
+import { getEbayRuntimeConfig, getEstimatorRuntimeConfig } from "@/services/config";
 import { ebayClient } from "@/services/ebay/client";
 import type { EbayItemSummary } from "@/services/ebay/types";
 import { evaluateListing, listingEffectivePrice } from "@/services/filter";
@@ -20,7 +28,8 @@ import {
   markScanQuotaExhausted,
   recordAiVerdict,
 } from "@/services/engine/scan-progress";
-import { dispatchDealNotification } from "@/services/notifications";
+import { dispatchDealNotification, dispatchTelegramDealBatch } from "@/services/notifications";
+import type { DealPayload } from "@/services/notifications/types";
 
 export const MANUAL_SEARCH_LIMIT = 100;
 export const BACKGROUND_SEARCH_LIMIT = 50;
@@ -44,6 +53,13 @@ export interface PollCycleSummary {
   errors: PollCycleError[];
 }
 
+interface PollContext {
+  estimatorEnabled: boolean;
+  minDiscount: number;
+  budget: ValuationBudget;
+  pendingTelegram: DealPayload[];
+}
+
 let cycleTail: Promise<void> = Promise.resolve();
 
 export function executePollCycle(options: PollCycleOptions = {}): Promise<PollCycleSummary> {
@@ -61,6 +77,19 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
   let newDealsFound = 0;
 
   try {
+    const estimator = await getEstimatorRuntimeConfig();
+    const ctx: PollContext = {
+      estimatorEnabled: estimator.enabled,
+      minDiscount: estimator.minDiscount,
+      budget: createValuationBudget(estimator.enabled),
+      pendingTelegram: [],
+    };
+    if (estimator.enabled) {
+      console.log(
+        `[valuation] Estimator enabled minDiscount=${estimator.minDiscount}% budget=${ctx.budget.remaining}`,
+      );
+    }
+
     const monitors = await prisma.monitor.findMany({
       where: {
         isActive: true,
@@ -83,7 +112,7 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
 
     for (const monitor of monitors) {
       try {
-        newDealsFound += await pollMonitor(monitor, searchLimit);
+        newDealsFound += await pollMonitor(monitor, searchLimit, ctx);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[poller] Monitor "${monitor.name}" (${monitor.id}) failed: ${message}`);
@@ -98,6 +127,7 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
     };
 
     finishScanProgress({ newDealsFound });
+    await dispatchTelegramDealBatch(ctx.pendingTelegram);
     const progress = getScanProgress();
 
     console.log(
@@ -115,7 +145,7 @@ async function runPollCycle(options: PollCycleOptions): Promise<PollCycleSummary
   }
 }
 
-async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<number> {
+async function pollMonitor(monitor: Monitor, searchLimit: number, ctx: PollContext): Promise<number> {
   markScanFetching(monitor.name);
   const search = await ebayClient.searchItems({
     query: monitor.query,
@@ -156,7 +186,7 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
         aiVerified: false,
         aiVerificationReason: reason.slice(0, 80),
         notify: false,
-      });
+      }, ctx);
       incrementScanInspected({ ai: monitor.aiVerify });
       continue;
     }
@@ -194,7 +224,7 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
             aiVerified: false,
             aiVerificationReason: "basic_filter_fallback",
             notify: true,
-          });
+          }, ctx);
           if (created) newDeals += 1;
           incrementScanInspected({ ai: true, newDeal: created });
           continue;
@@ -205,7 +235,7 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
             aiVerified: true,
             aiVerificationReason: gate.reason,
             notify: true,
-          });
+          }, ctx);
           if (created) newDeals += 1;
           passedAi += 1;
           recordAiVerdict(true);
@@ -217,7 +247,7 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
             aiVerified: false,
             aiVerificationReason: reason,
             notify: false,
-          });
+          }, ctx);
           recordAiVerdict(false);
           console.log(`[ai-gatekeeper] ❌ REJECTED: "${item.title}" | Reason: ${reason}`);
           incrementScanInspected({ ai: true });
@@ -229,7 +259,7 @@ async function pollMonitor(monitor: Monitor, searchLimit: number): Promise<numbe
       const created = await persistSeenListing(monitor, item, {
         status: "ACCEPTED",
         notify: true,
-      });
+      }, ctx);
       if (created) newDeals += 1;
       incrementScanInspected({ newDeal: created });
     }
@@ -274,12 +304,13 @@ function resolveSearchLimit(options: PollCycleOptions): number {
 async function persistSeenListing(
   monitor: Monitor,
   item: EbayItemSummary,
-  options?: {
+  options: {
     status?: "ACCEPTED" | "REJECTED";
     aiVerified?: boolean;
     aiVerificationReason?: string | null;
     notify?: boolean;
-  },
+  } | undefined,
+  ctx: PollContext,
 ): Promise<boolean> {
   const existing = await prisma.seenListing.findUnique({
     where: {
@@ -293,11 +324,20 @@ async function persistSeenListing(
 
   if (existing) return false;
 
+  const status = options?.status ?? "ACCEPTED";
+  const enrichment = status === "ACCEPTED" ? await maybeEstimateListing(monitor, item, ctx) : emptyEnrichment();
+
   const record = {
     ...toSeenListingInput(monitor.id, item),
-    status: options?.status ?? "ACCEPTED",
+    status,
     aiVerified: options?.aiVerified ?? false,
     aiVerificationReason: options?.aiVerificationReason ?? null,
+    estimatedFmv: enrichment.valuation?.estimatedFmv ?? null,
+    discountPercent: enrichment.valuation?.discountPercent ?? null,
+    idealoBWarePrice: null,
+    idealoShopName: null,
+    idealoProductUrl: null,
+    avgMarketPrice: null,
   };
 
   try {
@@ -305,7 +345,12 @@ async function persistSeenListing(
 
     if (options?.notify !== false && record.status === "ACCEPTED") {
       try {
-        await dispatchDealNotification({
+        const valuation = enrichment.valuation;
+        const highlight =
+          valuation && valuation.estimatedProfit > 0 && valuation.discountPercent >= ctx.minDiscount
+            ? valuation
+            : null;
+        const payload: DealPayload = {
           itemId: item.itemId,
           listingId: created.id,
           title: item.title,
@@ -319,7 +364,16 @@ async function persistSeenListing(
           endsAt: record.endsAt,
           monitorName: monitor.name,
           maxPrice: monitor.maxPrice,
-        });
+          estimatedFmv: valuation?.estimatedFmv ?? null,
+          discountPercent: highlight?.discountPercent ?? null,
+          idealoBWarePrice: null,
+          idealoShopName: null,
+          telegramNotifications: monitor.telegramNotifications,
+        };
+        await dispatchDealNotification(payload, { skipTelegram: true });
+        if (payload.telegramNotifications !== false) {
+          ctx.pendingTelegram.push(payload);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[poller] Notification failed for ${item.itemId}: ${message}`);
@@ -333,6 +387,47 @@ async function persistSeenListing(
   }
 
   return true;
+}
+
+async function maybeEstimateListing(
+  monitor: Monitor,
+  item: EbayItemSummary,
+  ctx: PollContext,
+): Promise<ListingEnrichment> {
+  const target = resolveTargetMarketValue(monitor.targetMarketValue);
+  const shipping = extractShipping(item).shippingCost ?? 0;
+  const price = listingEffectivePrice(item) ?? 0;
+  const listing = {
+    title: item.title,
+    price,
+    shipping,
+    condition: item.condition,
+    targetMarketValue: target,
+  };
+
+  if (target != null) {
+    const valuation = valuationFromFmv(target, price + shipping, "target");
+    console.log(
+      `[valuation] ${item.itemId} source=target fmv=${valuation.estimatedFmv} discount=${valuation.discountPercent}% profit=${valuation.estimatedProfit}`,
+    );
+    return { valuation };
+  }
+
+  if (!ctx.estimatorEnabled || ctx.budget.remaining <= 0) return emptyEnrichment();
+  ctx.budget.remaining -= 1;
+
+  const enrichment = await enrichListingValuation(listing);
+
+  if (enrichment.valuation) {
+    console.log(
+      `[valuation] ${item.itemId} source=${enrichment.valuation.source} fmv=${enrichment.valuation.estimatedFmv} discount=${enrichment.valuation.discountPercent}% profit=${enrichment.valuation.estimatedProfit}`,
+    );
+  }
+  return enrichment;
+}
+
+function emptyEnrichment(): ListingEnrichment {
+  return { valuation: null };
 }
 
 export async function clearSeenListings(monitorId?: string): Promise<number> {
