@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
-import { CRON_PRESETS } from "@/lib/format-ui";
+import { CRON_PRESETS, formatEuroAmount } from "@/lib/format-ui";
 import { ACCESSORY_JUNK_KEYWORDS, mergeKeywordInput } from "@/lib/negative-presets";
 import type { BuyingType, Monitor } from "@/lib/types";
 
@@ -21,6 +21,7 @@ export interface MonitorFormValues {
   categoryId: string;
   minPrice: string;
   maxPrice: string;
+  targetMarketValue: string;
   buyingType: BuyingType;
   maxRemainingHours: string;
   negativeKeywords: string;
@@ -36,6 +37,7 @@ export function valuesFromMonitor(monitor?: Monitor | null): MonitorFormValues {
     categoryId: monitor?.categoryId ?? "",
     minPrice: monitor?.minPrice != null ? String(monitor.minPrice) : "",
     maxPrice: monitor ? String(monitor.maxPrice) : "",
+    targetMarketValue: monitor?.targetMarketValue != null ? String(monitor.targetMarketValue) : "",
     buyingType: monitor?.buyingType ?? "ALL",
     maxRemainingHours: monitor?.maxRemainingHours != null ? String(monitor.maxRemainingHours) : "",
     negativeKeywords: monitor ? parseKeywordsInput(monitor.negativeKeywords) : "",
@@ -64,14 +66,21 @@ export function MonitorFormModal({
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [showAiSetupHint, setShowAiSetupHint] = useState(false);
+  const [syncQueryWithName, setSyncQueryWithName] = useState(true);
+  const [fetchingIdealo, setFetchingIdealo] = useState(false);
+  const [idealoHint, setIdealoHint] = useState<string | null>(null);
   const { push } = useToast();
   const editing = Boolean(monitor);
 
   useEffect(() => {
     if (open) {
-      setValues(valuesFromMonitor(monitor));
+      const next = valuesFromMonitor(monitor);
+      setValues(next);
+      setSyncQueryWithName(!monitor || next.name.trim() === next.query.trim());
       setErrors({});
       setShowAiSetupHint(false);
+      setIdealoHint(null);
+      setFetchingIdealo(false);
       api<{ marketplaceId?: string }>("/api/settings/ebay")
         .then((data) => setMarketplaceId(data.marketplaceId || "EBAY_DE"))
         .catch(() => setMarketplaceId("EBAY_DE"));
@@ -84,7 +93,20 @@ export function MonitorFormModal({
   }, [open, monitor]);
 
   function update<K extends keyof MonitorFormValues>(key: K, value: MonitorFormValues[K]) {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "name" && syncQueryWithName && typeof value === "string") {
+        next.query = value;
+      }
+      return next;
+    });
+  }
+
+  function toggleSyncQuery(checked: boolean) {
+    setSyncQueryWithName(checked);
+    if (checked) {
+      setValues((current) => ({ ...current, query: current.name }));
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -99,6 +121,7 @@ export function MonitorFormModal({
       categoryId: values.categoryId.trim() || null,
       minPrice: values.minPrice.trim() ? Number(values.minPrice) : null,
       maxPrice: Number(values.maxPrice),
+      targetMarketValue: values.targetMarketValue.trim() ? Number(values.targetMarketValue) : null,
       buyingType: values.buyingType,
       maxRemainingHours: values.maxRemainingHours ? Number(values.maxRemainingHours) : null,
       negativeKeywords: values.negativeKeywords
@@ -163,6 +186,54 @@ export function MonitorFormModal({
     }
   }
 
+  async function fetchIdealoRefurbPrice() {
+    const query = values.query.trim() || values.name.trim();
+    if (!query) {
+      setErrors((current) => ({ ...current, query: "Enter a search query before fetching Idealo prices." }));
+      return;
+    }
+
+    setFetchingIdealo(true);
+    setIdealoHint("Searching Idealo B-Ware...");
+    try {
+      const result = await api<{
+        success: boolean;
+        price: number;
+        title: string;
+        shop: string;
+      }>("/api/monitors/fetch-reference-price", {
+        method: "POST",
+        body: JSON.stringify({ query }),
+      });
+
+      const price = Number(result.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        setIdealoHint(null);
+        push({ tone: "error", title: "Idealo lookup failed", description: "No usable B-Ware price was returned." });
+        return;
+      }
+
+      const suggestedMax = Number((price * 0.8).toFixed(2));
+      setValues((current) => ({
+        ...current,
+        targetMarketValue: String(price),
+        maxPrice: current.maxPrice.trim() ? current.maxPrice : String(suggestedMax),
+      }));
+      setIdealoHint(`Found on Idealo B-Ware: €${formatEuroAmount(price)} (${result.shop} - ${result.title})`);
+      push({
+        tone: "success",
+        title: "Idealo B-Ware price found",
+        description: `€${formatEuroAmount(price)} from ${result.shop}.`,
+      });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Could not reach Idealo.";
+      setIdealoHint(null);
+      push({ tone: "error", title: "Idealo lookup failed", description: message });
+    } finally {
+      setFetchingIdealo(false);
+    }
+  }
+
   return (
     <Modal
       open={open}
@@ -183,7 +254,18 @@ export function MonitorFormModal({
             value={values.query}
             onChange={(event) => update("query", event.target.value)}
             placeholder="PS5 Digital Edition"
+            disabled={syncQueryWithName}
+            className="disabled:cursor-not-allowed disabled:opacity-60"
           />
+          <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
+            <input
+              type="checkbox"
+              checked={syncQueryWithName}
+              onChange={(event) => toggleSyncQuery(event.target.checked)}
+              className="h-3.5 w-3.5 rounded border-white/20 bg-zinc-950 text-sky-400 accent-sky-400"
+            />
+            Search query same as monitor name
+          </label>
         </Field>
         <Field label="Category ID (optional)">
           <Input
@@ -214,6 +296,29 @@ export function MonitorFormModal({
             />
           </Field>
         </div>
+        <Field label="Estimated Market / Resale Value (€) (Optional)" error={errors.targetMarketValue}>
+          <Input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={values.targetMarketValue}
+            onChange={(event) => update("targetMarketValue", event.target.value)}
+            placeholder="e.g. 320"
+          />
+          <button
+            type="button"
+            onClick={() => void fetchIdealoRefurbPrice()}
+            disabled={fetchingIdealo}
+            className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-xs font-medium text-sky-100 transition-colors hover:bg-sky-400/15 disabled:opacity-60"
+          >
+            {fetchingIdealo ? <LoaderCircle className="h-3 w-3 animate-spin" /> : "🔍"}
+            {fetchingIdealo ? "Searching Idealo B-Ware..." : "Fetch Idealo Refurb Price"}
+          </button>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+            {idealoHint ??
+              "If set, arbitrage margins will be calculated against this exact baseline instead of AI estimation."}
+          </p>
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Buying type">
             <Select value={values.buyingType} onChange={(event) => update("buyingType", event.target.value as BuyingType)}>
@@ -380,6 +485,12 @@ function validate(values: MonitorFormValues): Record<string, string> {
       errors.minPrice = "Enter a price greater than 0.";
     } else if (!errors.maxPrice && minPrice >= price) {
       errors.minPrice = "Min price must be less than max price.";
+    }
+  }
+  if (values.targetMarketValue.trim()) {
+    const target = Number(values.targetMarketValue);
+    if (!Number.isFinite(target) || target <= 0) {
+      errors.targetMarketValue = "Enter a value greater than 0.";
     }
   }
   if (values.maxRemainingHours) {
