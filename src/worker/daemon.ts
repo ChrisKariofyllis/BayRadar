@@ -1,102 +1,169 @@
 import "dotenv/config";
 
-import { schedule, shutdown, validate, type ScheduledTask } from "node-cron";
-
 import { prisma } from "@/db/prisma";
+import { isMonitorDue, scheduleIntervalMs } from "@/lib/schedule";
 import { syncEndedSnipeOutcomes } from "@/lib/sniper/sync-outcomes";
-import { executePollCycle } from "@/services/engine/poller";
+import { BACKGROUND_SEARCH_LIMIT, executePollCycle } from "@/services/engine/poller";
 import { startTelegramBotLoop } from "@/worker/telegram-bot";
 
-const DEFAULT_CRON = process.env.WORKER_DEFAULT_CRON?.trim() || "*/5 * * * *";
-const RECONCILE_CRON = "*/5 * * * *";
+const MINUTE_MS = 60_000;
+const SCHEDULER_TICK_MS = 30_000;
+const MONITOR_TIMEOUT_MS = 20_000;
+const HEARTBEAT_EVERY = 4;
+const SNIPE_SYNC_EVERY = 10;
 
-const pollJobs = new Map<string, ScheduledTask>();
 let shuttingDown = false;
+let tickCount = 0;
+let schedulerTimer: ReturnType<typeof setTimeout> | null = null;
+const runningMonitors = new Set<string>();
 const shutdownAbort = new AbortController();
 
 async function main(): Promise<void> {
-  console.log(`[daemon] BayRadar worker starting (default cron=${DEFAULT_CRON})`);
+  console.log(`[daemon] BayRadar worker starting (scheduler tick=${SCHEDULER_TICK_MS}ms)`);
 
   void startTelegramBotLoop(shutdownAbort.signal).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[daemon] Telegram bot loop crashed: ${message}`);
   });
 
-  await syncPollSchedules();
-  schedule(RECONCILE_CRON, () => syncPollSchedules(), {
-    name: "reconcile-schedules",
-    noOverlap: true,
-  });
+  process.once("SIGINT", () => void handleShutdown("SIGINT"));
+  process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
 
   const boot = await executePollCycle();
   console.log("[daemon] Startup poll complete", formatSummary(boot));
   await runSnipeOutcomeSync("startup");
 
-  process.once("SIGINT", () => void handleShutdown("SIGINT"));
-  process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
-
-  console.log("[daemon] Listening for cron ticks. Press Ctrl+C to stop.");
+  console.log("[daemon] Starting resilient scheduler loop. Press Ctrl+C to stop.");
+  schedulerLoop();
 }
 
-async function syncPollSchedules(): Promise<void> {
+function schedulerLoop(): void {
   if (shuttingDown) return;
+
+  void (async () => {
+    try {
+      await checkAndRunDueMonitors();
+    } catch (err) {
+      console.error("[SchedulerError] Unexpected error in loop:", err);
+    } finally {
+      if (!shuttingDown) {
+        schedulerTimer = setTimeout(schedulerLoop, SCHEDULER_TICK_MS);
+      }
+    }
+  })();
+}
+
+async function checkAndRunDueMonitors(): Promise<void> {
+  tickCount += 1;
+  const nowIso = new Date().toISOString();
+
+  if (tickCount === 1 || tickCount % HEARTBEAT_EVERY === 0) {
+    console.log(`[SchedulerHeartbeat] Checking monitors at ${nowIso}`);
+  }
 
   const monitors = await prisma.monitor.findMany({
     where: { isActive: true },
-    select: { cronSchedule: true },
+    select: {
+      id: true,
+      name: true,
+      cronSchedule: true,
+      lastRunAt: true,
+    },
+    orderBy: { createdAt: "asc" },
   });
 
-  const wanted = new Set<string>();
-  for (const monitor of monitors) {
-    const expression = monitor.cronSchedule?.trim() || DEFAULT_CRON;
-    if (!validate(expression)) {
-      console.warn(`[daemon] Ignoring invalid cron expression: ${expression}`);
+  const due = monitors.filter((monitor) => isMonitorDue(monitor));
+  if (due.length > 0) {
+    console.log(
+      `[Scheduler] ${due.length} due monitor(s) at ${nowIso}: ${due.map((monitor) => monitor.name).join(", ")}`,
+    );
+  }
+
+  for (const monitor of due) {
+    if (shuttingDown) break;
+    if (runningMonitors.has(monitor.id)) {
+      console.log(`[Scheduler] Skipping "${monitor.name}" — still running from a previous tick`);
       continue;
     }
-    wanted.add(expression);
+
+    runningMonitors.add(monitor.id);
+    try {
+      // Claim the slot before the scan so a slow poll cannot be double-scheduled.
+      await prisma.monitor.update({
+        where: { id: monitor.id },
+        data: { lastRunAt: new Date() },
+      });
+
+      const intervalLabel = formatInterval(scheduleIntervalMs(monitor.cronSchedule));
+      console.log(`[Scheduler] Running "${monitor.name}" (every ${intervalLabel})`);
+
+      const summary = await runMonitorWithTimeout(monitor.id, monitor.name);
+      console.log(`[Scheduler] Finished "${monitor.name}"`, formatSummary(summary));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Scheduler] Monitor "${monitor.name}" (${monitor.id}) failed: ${message}`);
+    } finally {
+      runningMonitors.delete(monitor.id);
+    }
   }
 
-  if (wanted.size === 0) {
-    wanted.add(DEFAULT_CRON);
+  if (tickCount === 1 || tickCount % SNIPE_SYNC_EVERY === 0) {
+    await runSnipeOutcomeSync(`tick-${tickCount}`);
   }
+}
 
-  for (const expression of wanted) {
-    if (pollJobs.has(expression)) continue;
+async function runMonitorWithTimeout(
+  monitorId: string,
+  monitorName: string,
+): Promise<{ totalMonitors: number; newDealsFound: number; errors: unknown[] }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MONITOR_TIMEOUT_MS);
+  const work = executePollCycle({
+    monitorId,
+    searchLimit: BACKGROUND_SEARCH_LIMIT,
+  });
+  void work.catch((error) => {
+    if (controller.signal.aborted) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Scheduler] "${monitorName}" finished after timeout with error: ${message}`);
+    }
+  });
 
-    const task = schedule(
-      expression,
-      async () => {
-        const summary = await executePollCycle({ cronSchedule: expression });
-        console.log(`[daemon] Scheduled poll (${expression})`, formatSummary(summary));
-        await runSnipeOutcomeSync(expression);
+  try {
+    return await Promise.race([
+      work,
+      abortAfter(controller.signal, `Monitor "${monitorName}" timed out after ${MONITOR_TIMEOUT_MS}ms`),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function abortAfter(signal: AbortSignal, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(new Error(message));
+      return;
+    }
+    signal.addEventListener(
+      "abort",
+      () => {
+        reject(new Error(message));
       },
-      { name: `poll:${expression}`, noOverlap: true },
+      { once: true },
     );
-
-    pollJobs.set(expression, task);
-    console.log(`[daemon] Registered poll job ${expression} (next=${task.getNextRun()?.toISOString() ?? "n/a"})`);
-  }
-
-  for (const [expression, task] of pollJobs) {
-    if (wanted.has(expression)) continue;
-    await task.destroy();
-    pollJobs.delete(expression);
-    console.log(`[daemon] Removed unused poll job ${expression}`);
-  }
+  });
 }
 
 async function handleShutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   shutdownAbort.abort();
-  console.log(`[daemon] ${signal} received, shutting down gracefully…`);
-
-  try {
-    await shutdown(10_000);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[daemon] Cron shutdown error: ${message}`);
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+    schedulerTimer = null;
   }
+  console.log(`[daemon] ${signal} received, shutting down gracefully…`);
 
   try {
     await prisma.$disconnect();
@@ -123,6 +190,12 @@ async function runSnipeOutcomeSync(label: string): Promise<void> {
 
 function formatSummary(summary: { totalMonitors: number; newDealsFound: number; errors: unknown[] }): string {
   return `monitors=${summary.totalMonitors} newDeals=${summary.newDealsFound} errors=${summary.errors.length}`;
+}
+
+function formatInterval(ms: number): string {
+  if (ms % (60 * MINUTE_MS) === 0) return `${ms / (60 * MINUTE_MS)}h`;
+  if (ms % MINUTE_MS === 0) return `${ms / MINUTE_MS}m`;
+  return `${ms}ms`;
 }
 
 main().catch(async (error) => {
