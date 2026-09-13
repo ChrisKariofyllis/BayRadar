@@ -13,6 +13,8 @@ const GET_UPDATES_TIMEOUT_SEC = 25;
 const FETCH_TIMEOUT_MS = 35_000;
 const IDLE_RETRY_MS = 15_000;
 const ERROR_RETRY_MS = 5_000;
+const CONFLICT_BASE_RETRY_MS = 15_000;
+const CONFLICT_MAX_RETRY_MS = 5 * 60 * 1000;
 const CUSTOM_BID_TTL_MS = 2 * 60 * 1000;
 const PROMPT_TEXT = "Reply to this message with your max bid in € (e.g. 175):";
 const ARMED_SUFFIX_RE = /\n\n🎯 Armed with Gixen: €[^\n]*$/;
@@ -64,6 +66,7 @@ export async function startTelegramBotLoop(signal: AbortSignal): Promise<void> {
   let lastToken = "";
   let pollerActive = false;
   let loggedWaiting = false;
+  let conflictStreak = 0;
 
   while (!signal.aborted) {
     try {
@@ -103,21 +106,38 @@ export async function startTelegramBotLoop(signal: AbortSignal): Promise<void> {
           console.error(`[telegram] Failed to handle update ${update.update_id}: ${message}`);
         }
       }
+      conflictStreak = 0;
     } catch (error) {
       if (signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("409")) {
-        console.warn("[telegram] getUpdates conflict (webhook set?). Clearing webhook and retrying.");
-        const token = lastToken || (await loadTelegramBotConfig())?.token;
-        if (token) {
-          await telegramCall(token, "deleteWebhook", { drop_pending_updates: false }).catch(() => undefined);
+      if (isConflictError(message)) {
+        conflictStreak += 1;
+        if (conflictStreak === 1) {
+          console.warn(
+            "[telegram] getUpdates conflict: another BayRadar instance or a webhook owns this bot token. Backing off.",
+          );
+          const token = lastToken || (await loadTelegramBotConfig())?.token;
+          if (token) {
+            await telegramCall(token, "deleteWebhook", { drop_pending_updates: false }).catch(() => undefined);
+          }
         }
-      } else {
-        console.error(`[telegram] Poller error: ${message}`);
+        await sleep(conflictBackoffMs(conflictStreak), signal);
+        continue;
       }
+
+      conflictStreak = 0;
+      console.error(`[telegram] Poller error: ${message}`);
       await sleep(ERROR_RETRY_MS, signal);
     }
   }
+}
+
+function isConflictError(message: string): boolean {
+  return message.includes("409") || /\bconflict\b/i.test(message);
+}
+
+function conflictBackoffMs(streak: number): number {
+  return Math.min(CONFLICT_MAX_RETRY_MS, CONFLICT_BASE_RETRY_MS * 2 ** (streak - 1));
 }
 
 async function loadTelegramBotConfig(): Promise<TelegramBotConfig | null> {
@@ -601,8 +621,8 @@ async function telegramCall<T = unknown>(
     | null;
 
   if (!response.ok || !payload?.ok) {
-    const description = payload?.description || `${response.status} ${response.statusText}`;
-    throw new Error(`${method} failed: ${description}`);
+    const description = payload?.description || response.statusText;
+    throw new Error(`${method} failed: ${response.status} ${description}`);
   }
 
   return payload.result as T;
@@ -614,14 +634,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       resolve();
       return;
     }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    // The signal outlives every sleep, so the listener must be detached on the
+    // normal timer path too or it accumulates for the life of the worker.
+    const onAbort = () => {
+      clearTimeout(timer);
+      finish();
+    };
+    const finish = () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
