@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FChrisKariofyllis%2FBayRadar&env=DATABASE_URL,TURSO_AUTH_TOKEN,APP_SECRET,CRON_SECRET&envDescription=Enter%20your%20Turso%20Database%20URL%2C%20Auth%20Token%2C%20and%20random%20secrets%20for%20security.&project-name=bayradar)
-[![Version](https://img.shields.io/badge/version-v1.4.2-orange)](./package.json)
+[![Version](https://img.shields.io/badge/version-v1.4.3-orange)](./package.json)
 
 > **Self-hosted, automated eBay deal radar & auction monitor.**  
 > Monitor targeted searches, filter out scams and junk listings, and get real-time instant alerts on your phone via Tailscale or your home server.
@@ -34,7 +34,7 @@ Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 - 🏷️ **Idealo B-Ware Market Value** — From Create/Edit Monitor, fetch the current Idealo **B-Ware & Gebraucht** price for the query, fill **Market Value / Baseline**, and optionally suggest a max price ~20% below that reference. The lookup prefers camera **Body / Gehäuse** over lens kits and walks color/storage variants for the true lowest used offer. Scans compare landed eBay cost against that baseline and only show the fire-badge discount when it is a real margin.
 - 🧪 **Built-in Mock / Demo Engine** — Test the entire pipeline, filtering, and notifications immediately without waiting for eBay Developer key approval.
 - ⚙️ **In-App Credentials Manager** — Configure eBay keys, marketplace, AI provider, and optional Gixen sniping credentials directly from the Web UI.
-- 🐳 **Self-Hosted & Docker Native** — Single container packaging Next.js Dashboard + Background Poller Daemon with persistent SQLite storage.
+- 🐳 **Self-Hosted & Docker Native** — Single container packaging Next.js Dashboard + Background Poller Daemon with persistent SQLite storage. The worker checks due monitors every 30 seconds (self-healing loop) instead of relying only on cron ticks.
 
 ---
 
@@ -133,7 +133,7 @@ npx prisma migrate dev
 # Run Next.js dashboard
 npm run dev
 
-# Run worker daemon in separate terminal
+# Run worker daemon in separate terminal (30s due-check loop + startup poll)
 npm run worker
 ```
 
