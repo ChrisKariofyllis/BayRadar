@@ -1,8 +1,12 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import pkg from "./package.json";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version || "1.4.2",
+  },
   outputFileTracingRoot: path.join(__dirname),
   outputFileTracingExcludes: {
     "*": [

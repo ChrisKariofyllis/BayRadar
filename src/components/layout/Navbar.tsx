@@ -97,10 +97,13 @@ function Brand() {
         <Radar className="radar-pulse relative h-4 w-4" />
       </span>
       <span className="flex items-center gap-2">
-        BayRadar
-        <span className="relative flex h-2 w-2" aria-label="Live">
+        <span>BayRadar</span>
+        <span className="relative flex h-2 w-2 shrink-0" aria-label="Live">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+        </span>
+        <span className="shrink-0 font-mono text-[10px] font-medium leading-none tracking-wide px-1.5 py-0.5 rounded-md bg-neutral-800 text-neutral-400 border border-neutral-700/50 select-none">
+          v{process.env.NEXT_PUBLIC_APP_VERSION || "1.4.2"}
         </span>
       </span>
     </Link>
