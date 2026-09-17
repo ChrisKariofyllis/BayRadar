@@ -1,11 +1,16 @@
 "use client";
 
-import { ChevronDown, Eye, EyeOff, Info } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  SettingsField,
+  SettingsGroup,
+  SettingsSecretToggle,
+  SettingsStack,
+} from "@/components/settings/SettingsGroup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
@@ -162,107 +167,105 @@ export function EbaySettingsCard() {
   }
 
   return (
-    <Card className="divide-y divide-white/[0.06] p-0">
-      <div className="p-5">
-        <h3 className="font-medium text-zinc-50">eBay Account & API Configuration</h3>
-        <p className="mt-1 text-sm text-zinc-400">
-          Stored in BayRadar&apos;s database. <code className="text-zinc-300">.env</code> values are used only as fallback.
-        </p>
-      </div>
-
-      <div className="flex items-start justify-between gap-3 p-5">
-        <div>
-          <h4 className="font-medium text-zinc-50">Demo / mock engine</h4>
-          <p className="mt-1 text-sm text-zinc-400">
+    <SettingsGroup
+      footer={
+        <>
+          Stored in BayRadar&apos;s database. <code className="text-zinc-300">.env</code> values are used only as
+          fallback.
+        </>
+      }
+    >
+      <div className="flex min-h-11 items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[17px] leading-5 text-zinc-50">Demo / mock engine</p>
+          <p className="mt-1 text-[13px] leading-4 text-zinc-400">
             Exercise the full deal pipeline while the eBay app is under review. Listings are tagged{" "}
             <code className="text-zinc-300">[MOCK]</code>.
           </p>
-          <div className="mt-3">
+          <div className="mt-2">
             <Badge tone={mockMode ? "warning" : "neutral"}>{mockReasonLabel(mockReason, mockMode)}</Badge>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{mockMode ? "On" : "Off"}</span>
-          <Switch
-            checked={mockMode}
-            disabled={savingMock}
-            onCheckedChange={toggleMock}
-            label="Enable eBay mock mode"
-          />
-        </div>
+        <Switch
+          checked={mockMode}
+          disabled={savingMock}
+          onCheckedChange={toggleMock}
+          label="Enable eBay mock mode"
+        />
       </div>
 
-      <div className="grid gap-4 p-5">
-        <div className="grid gap-1.5">
-          <Label htmlFor="ebay-app-id">App ID (Client ID)</Label>
+      <SettingsStack>
+        <SettingsField label="App ID (client ID)" htmlFor="ebay-app-id">
           <Input
             id="ebay-app-id"
             value={appId}
             onChange={(event) => setAppId(event.target.value)}
-            placeholder="Your eBay App ID (Client ID)"
+            placeholder="Your eBay App ID (client ID)"
             autoComplete="off"
           />
-        </div>
+        </SettingsField>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="ebay-cert-id">Cert ID (Client Secret)</Label>
+        <SettingsField label="Cert ID (client secret)" htmlFor="ebay-cert-id">
           <div className="relative">
             <Input
               id="ebay-cert-id"
               type={showCert ? "text" : "password"}
               value={certId}
               onChange={(event) => setCertId(event.target.value)}
-              placeholder={hasCertId ? "Saved — enter a new secret to replace it" : "Your eBay Cert ID (Client Secret)"}
+              placeholder={hasCertId ? "Saved — enter a new secret to replace it" : "Your eBay Cert ID (client secret)"}
               autoComplete="new-password"
               className="pr-11"
             />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-100"
-              onClick={() => setShowCert((value) => !value)}
-              aria-label={showCert ? "Hide Cert ID" : "Show Cert ID"}
-            >
-              {showCert ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+            <SettingsSecretToggle
+              revealed={showCert}
+              onToggle={() => setShowCert((value) => !value)}
+              hideLabel="Hide Cert ID"
+              showLabel="Show Cert ID"
+            />
           </div>
-        </div>
+        </SettingsField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>Environment</Label>
+            <Label className="text-[13px] font-normal text-zinc-400">Environment</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["PRODUCTION", "SANDBOX"] as const).map((value) => (
                 <button
                   key={value}
                   type="button"
+                  aria-pressed={environment === value}
                   onClick={() => setEnvironment(value)}
                   className={
                     environment === value
-                      ? "h-10 rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-medium text-zinc-950 shadow-sm ring-1 ring-white/10"
-                      : "h-10 rounded-xl border border-white/10 text-sm text-zinc-300 hover:bg-white/[0.05]"
+                      ? "min-h-11 rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-sm font-medium text-zinc-950 shadow-sm ring-1 ring-white/10"
+                      : "min-h-11 rounded-xl border border-white/10 text-sm text-zinc-300 hover:bg-white/[0.05]"
                   }
                 >
-                  {value}
+                  {value === "PRODUCTION" ? "Production" : "Sandbox"}
                 </button>
               ))}
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ebay-marketplace">Marketplace ID</Label>
+          <SettingsField label="Marketplace" htmlFor="ebay-marketplace-search">
             <Input
               id="ebay-marketplace-search"
               value={marketplaceQuery}
               onChange={(event) => setMarketplaceQuery(event.target.value)}
               placeholder="Search marketplace…"
             />
-            <Select value={marketplaceId} onChange={(event) => setMarketplaceId(event.target.value)}>
+            <Select
+              id="ebay-marketplace"
+              aria-label="Marketplace ID"
+              value={marketplaceId}
+              onChange={(event) => setMarketplaceId(event.target.value)}
+            >
               {(marketplaces.length ? marketplaces : EBAY_MARKETPLACES).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.id} ({item.label})
                 </option>
               ))}
             </Select>
-          </div>
+          </SettingsField>
         </div>
 
         <FieldError message={error} />
@@ -274,17 +277,17 @@ export function EbaySettingsCard() {
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={save} loading={saving}>
-            Save Configuration
+          <Button className="min-h-11" onClick={save} loading={saving}>
+            Save
           </Button>
-          <Button variant="outline" onClick={testConnection} loading={testing}>
-            Test eBay Connection
+          <Button className="min-h-11" variant="secondary" onClick={testConnection} loading={testing}>
+            Test connection
           </Button>
         </div>
 
         <button
           type="button"
-          className="flex items-center gap-2 text-left text-sm text-zinc-400 hover:text-zinc-200"
+          className="flex min-h-11 items-center gap-2 text-left text-sm text-zinc-400 hover:text-zinc-200"
           onClick={() => setHelpOpen((value) => !value)}
         >
           <Info className="h-4 w-4 shrink-0" />
@@ -292,8 +295,8 @@ export function EbaySettingsCard() {
           <ChevronDown className={`h-4 w-4 transition ${helpOpen ? "rotate-180" : ""}`} />
         </button>
         {helpOpen ? (
-          <p className="rounded-xl border border-white/[0.08] bg-black/20 p-3 text-sm text-zinc-400">
-            Create a free eBay Developer account at{" "}
+          <p className="text-[13px] leading-5 text-zinc-400">
+            Create a free eBay developer account at{" "}
             <a
               href="https://developer.ebay.com"
               target="_blank"
@@ -302,18 +305,18 @@ export function EbaySettingsCard() {
             >
               developer.ebay.com
             </a>
-            , create an Application Keyset, and paste your App ID &amp; Cert ID here.
+            , create an application keyset, and paste your App ID and Cert ID here.
           </p>
         ) : null}
-      </div>
-    </Card>
+      </SettingsStack>
+    </SettingsGroup>
   );
 }
 
 function mockReasonLabel(reason: EbaySettingsResponse["mockReason"], enabled: boolean): string {
   if (!enabled) return "Live eBay API";
   if (reason === "env") return "Forced on via EBAY_MOCK_MODE";
-  if (reason === "settings") return "Enabled in Settings";
+  if (reason === "settings") return "Enabled in settings";
   if (reason === "missing-credentials") return "Auto-on — eBay keys not configured";
   if (reason === "invalid-credentials") return "Fallback — credentials rejected";
   return "Mock catalog active";

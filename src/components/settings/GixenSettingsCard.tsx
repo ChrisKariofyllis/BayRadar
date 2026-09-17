@@ -1,12 +1,16 @@
 "use client";
 
-import { Eye, EyeOff, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import {
+  SettingsField,
+  SettingsGroup,
+  SettingsSecretToggle,
+  SettingsStack,
+} from "@/components/settings/SettingsGroup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { FieldError, Input, Label } from "@/components/ui/input";
+import { FieldError, Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
@@ -64,6 +68,36 @@ export function GixenSettingsCard() {
       });
   }, [push]);
 
+  async function persistEnabled(next: boolean) {
+    const previous = enabled;
+    setEnabled(next);
+    if (!username.trim() || (!hasPassword && !password.trim())) {
+      return;
+    }
+    try {
+      const result = await api<GixenSettingsResponse>("/api/settings/gixen", {
+        method: "POST",
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim() || undefined,
+          enabled: next,
+        }),
+      });
+      setHasPassword(result.hasPassword);
+      setConfigured(result.configured);
+      setEnabled(result.enabled);
+      setHandshakeOk(Boolean(result.handshakeOk));
+      setMirrorActive(Boolean(result.mirrorActive));
+    } catch (err) {
+      setEnabled(previous);
+      push({
+        tone: "error",
+        title: "Could not update Gixen",
+        description: err instanceof ApiError ? err.message : undefined,
+      });
+    }
+  }
+
   async function save() {
     if (!username.trim()) {
       setError("Username is required.");
@@ -94,9 +128,7 @@ export function GixenSettingsCard() {
       push({
         tone: "success",
         title: "Gixen configuration saved",
-        description: result.handshakeOk
-          ? undefined
-          : "Run Test Connection to verify the web login handshake.",
+        description: result.handshakeOk ? undefined : "Run Test connection to verify the web login handshake.",
       });
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Save failed";
@@ -132,38 +164,40 @@ export function GixenSettingsCard() {
   }
 
   return (
-    <Card className="divide-y divide-white/[0.06] p-0">
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-medium text-zinc-50">Sniping / Gixen Configuration</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Signs into gixen.com with your account and submits snipes through the dashboard form.
-              The legacy XML API is disabled.
-            </p>
-          </div>
-          <Badge tone={ready ? "success" : configured && enabled ? "warning" : configured ? "neutral" : "neutral"}>
-            {ready ? "Ready" : configured && enabled ? "Handshake required" : configured ? "Disabled" : "Not configured"}
-          </Badge>
-        </div>
-      </div>
-
-      <div className="flex items-start justify-between gap-3 p-5">
-        <div>
-          <h4 className="font-medium text-zinc-50">Enable Gixen Sniping</h4>
-          <p className="mt-1 text-sm text-zinc-400">
+    <SettingsGroup
+      footer={
+        <>
+          Ready turns green only after a successful login handshake. Create or manage your account at{" "}
+          <a
+            href="https://www.gixen.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-300 underline-offset-2 hover:underline"
+          >
+            gixen.com
+          </a>
+          . Settings override <code className="text-zinc-300">GIXEN_USERNAME</code> /{" "}
+          <code className="text-zinc-300">GIXEN_PASSWORD</code> in <code className="text-zinc-300">.env</code>.
+        </>
+      }
+    >
+      <div className="flex min-h-11 items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[17px] leading-5 text-zinc-50">Enable Gixen sniping</p>
+          <p className="mt-1 text-[13px] leading-4 text-zinc-400">
             When on, auction cards can submit a max bid through your Gixen web session.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{enabled ? "On" : "Off"}</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} label="Enable Gixen Sniping" />
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge tone={ready ? "success" : configured && enabled ? "warning" : "neutral"}>
+            {ready ? "Ready" : configured && enabled ? "Handshake required" : configured ? "Disabled" : "Not configured"}
+          </Badge>
+          <Switch checked={enabled} onCheckedChange={(next) => void persistEnabled(next)} label="Enable Gixen sniping" />
         </div>
       </div>
 
-      <div className="grid gap-4 p-5">
-        <div className="grid gap-1.5">
-          <Label htmlFor="gixen-username">GIXEN_USERNAME</Label>
+      <SettingsStack>
+        <SettingsField label="Username" htmlFor="gixen-username">
           <Input
             id="gixen-username"
             value={username}
@@ -171,10 +205,9 @@ export function GixenSettingsCard() {
             placeholder="Your Gixen username"
             autoComplete="username"
           />
-        </div>
+        </SettingsField>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="gixen-password">GIXEN_PASSWORD</Label>
+        <SettingsField label="Password" htmlFor="gixen-password">
           <div className="relative">
             <Input
               id="gixen-password"
@@ -185,22 +218,18 @@ export function GixenSettingsCard() {
               autoComplete="new-password"
               className="pr-11"
             />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-100"
-              onClick={() => setShowPassword((value) => !value)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+            <SettingsSecretToggle
+              revealed={showPassword}
+              onToggle={() => setShowPassword((value) => !value)}
+              hideLabel="Hide password"
+              showLabel="Show password"
+            />
           </div>
-        </div>
+        </SettingsField>
 
         <FieldError message={error} />
 
-        {mirrorActive && handshakeOk ? (
-          <Badge tone="success">Gixen Mirror confirmed</Badge>
-        ) : null}
+        {mirrorActive && handshakeOk ? <Badge tone="success">Gixen Mirror confirmed</Badge> : null}
 
         {testResult ? (
           <Badge tone={testResult.success ? "success" : "danger"}>
@@ -209,31 +238,14 @@ export function GixenSettingsCard() {
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => void save()} loading={saving}>
-            Save Configuration
+          <Button className="min-h-11" onClick={() => void save()} loading={saving}>
+            Save
           </Button>
-          <Button variant="outline" onClick={() => void testConnection()} loading={testing}>
-            Test Connection
+          <Button className="min-h-11" variant="secondary" onClick={() => void testConnection()} loading={testing}>
+            Test connection
           </Button>
         </div>
-
-        <p className="flex items-start gap-2 text-sm text-zinc-500">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Ready turns green only after a successful login handshake. Create or manage your account at{" "}
-            <a
-              href="https://www.gixen.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-amber-300 underline-offset-2 hover:underline"
-            >
-              gixen.com
-            </a>
-            . Settings override <code className="text-zinc-400">GIXEN_USERNAME</code> /{" "}
-            <code className="text-zinc-400">GIXEN_PASSWORD</code> in <code className="text-zinc-400">.env</code>.
-          </span>
-        </p>
-      </div>
-    </Card>
+      </SettingsStack>
+    </SettingsGroup>
   );
 }

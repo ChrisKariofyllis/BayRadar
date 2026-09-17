@@ -4,7 +4,7 @@ import { forwardRef, type InputHTMLAttributes, type LabelHTMLAttributes, type Se
 import { cn } from "@/lib/cn";
 
 const fieldClass =
-  "h-10 w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none focus:ring-2 focus:ring-amber-400/20";
+  "h-11 w-full cursor-text rounded-xl border border-white/[0.08] bg-black/30 px-3 text-sm text-zinc-100 placeholder:text-zinc-400 focus:border-amber-400/50 focus:outline-none focus:ring-2 focus:ring-amber-400/20";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
@@ -28,7 +28,7 @@ export function FieldError({ message }: { message?: string }) {
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div className="relative">
-      <select className={cn(fieldClass, "appearance-none pr-10", className)} {...props}>
+      <select className={cn(fieldClass, "cursor-pointer appearance-none pr-10", className)} {...props}>
         {children}
       </select>
       <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />

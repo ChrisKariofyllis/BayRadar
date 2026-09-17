@@ -6,10 +6,15 @@ import { AiSettingsCard } from "@/components/settings/AiSettingsCard";
 import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
 import { ExperimentalSettingsCard } from "@/components/settings/ExperimentalSettingsCard";
 import { GixenSettingsCard } from "@/components/settings/GixenSettingsCard";
+import {
+  SettingsField,
+  SettingsGroup,
+  SettingsSection,
+  SettingsStack,
+} from "@/components/settings/SettingsGroup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { FieldError, Input, Label } from "@/components/ui/input";
+import { FieldError, Input, Select } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { api, ApiError } from "@/lib/api-client";
@@ -55,7 +60,7 @@ const PROVIDERS: Array<{
   {
     provider: "GOTIFY",
     title: "Gotify",
-    blurb: "Self-hosted Gotify app token + server URL.",
+    blurb: "Self-hosted Gotify app token and server URL.",
     fields: ["endpointUrl", "authToken", "priority"],
     hints: {
       endpointUrl: "https://gotify.example.com",
@@ -119,6 +124,36 @@ export function SettingsView() {
 
   function updateDraft(provider: NotificationProvider, patch: Partial<Draft>) {
     setDrafts((current) => ({ ...current, [provider]: { ...current[provider], ...patch } }));
+  }
+
+  async function persistEnabled(provider: NotificationProvider, isEnabled: boolean) {
+    const draft = drafts[provider];
+    updateDraft(provider, { isEnabled });
+    if (!draft.id) return;
+    try {
+      const payload: Record<string, unknown> = {
+        id: draft.id,
+        provider,
+        name: draft.name || provider,
+        endpointUrl: draft.endpointUrl || null,
+        channel: draft.channel || null,
+        priority: Number(draft.priority || 3),
+        isEnabled,
+      };
+      if (draft.authToken.trim()) payload.authToken = draft.authToken.trim();
+      const result = await api<{ notification: NotificationChannel }>("/api/notifications", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      updateDraft(provider, { id: result.notification.id, hasAuthToken: Boolean(result.notification.hasAuthToken) });
+    } catch (error) {
+      updateDraft(provider, { isEnabled: draft.isEnabled });
+      push({
+        tone: "error",
+        title: "Could not update channel",
+        description: error instanceof ApiError ? error.message : undefined,
+      });
+    }
   }
 
   async function save(provider: NotificationProvider, thenTest = false) {
@@ -195,125 +230,138 @@ export function SettingsView() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          eBay credentials, Gixen sniping, AI exclusions, experimental valuation, notification channels, and system status.
+    <div className="mx-auto max-w-2xl space-y-8">
+      <div className="px-1">
+        <h1 className="text-[28px] font-semibold tracking-tight text-zinc-50">Settings</h1>
+        <p className="mt-1 text-[15px] text-zinc-400">
+          eBay credentials, Gixen sniping, AI exclusions, experimental valuation, notification channels, and system
+          status.
         </p>
       </div>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">eBay integration</h2>
+      <SettingsSection title="eBay integration">
         <EbaySettingsCard />
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Sniping / Gixen</h2>
+      <SettingsSection title="Sniping / Gixen">
         <GixenSettingsCard />
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">AI configuration</h2>
+      <SettingsSection title="AI configuration">
         <AiSettingsCard />
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">🧪 Experimental Features</h2>
+      <SettingsSection title="Experimental">
         <ExperimentalSettingsCard />
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Notification channels</h2>
-        <div className="grid gap-4 xl:grid-cols-2">
+      <SettingsSection title="Notification channels">
+        <div className="space-y-6">
           {PROVIDERS.map((config) => {
             const draft = drafts[config.provider];
+            const idPrefix = config.provider.toLowerCase();
             return (
-              <Card key={config.provider} className="divide-y divide-white/[0.06] p-0">
-                <div className="flex items-start justify-between gap-3 p-5">
-                  <div>
-                    <h3 className="font-medium text-zinc-50">{config.title}</h3>
-                    <p className="mt-1 text-sm text-zinc-400">{config.blurb}</p>
+              <SettingsGroup key={config.provider}>
+                <div className="flex min-h-11 items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[17px] leading-5 text-zinc-50">{config.title}</p>
+                    <p className="mt-1 text-[13px] leading-4 text-zinc-400">{config.blurb}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500">{draft.isEnabled ? "On" : "Off"}</span>
-                    <Switch
-                      checked={draft.isEnabled}
-                      onCheckedChange={(isEnabled) => updateDraft(config.provider, { isEnabled })}
-                      label={`Enable ${config.title}`}
-                    />
-                  </div>
+                  <Switch
+                    checked={draft.isEnabled}
+                    onCheckedChange={(isEnabled) => void persistEnabled(config.provider, isEnabled)}
+                    label={`Enable ${config.title}`}
+                  />
                 </div>
-                <div className="grid gap-3 p-5">
+                <SettingsStack>
                   {config.fields.includes("endpointUrl") ? (
-                    <Field label="Endpoint URL">
+                    <SettingsField label="Endpoint URL" htmlFor={`${idPrefix}-endpoint`}>
                       <Input
+                        id={`${idPrefix}-endpoint`}
                         value={draft.endpointUrl}
                         onChange={(event) => updateDraft(config.provider, { endpointUrl: event.target.value })}
                         placeholder={config.hints.endpointUrl}
                       />
-                    </Field>
+                    </SettingsField>
                   ) : null}
                   {config.fields.includes("authToken") ? (
-                    <Field label="Auth / bot token">
+                    <SettingsField label="Auth / bot token" htmlFor={`${idPrefix}-token`}>
                       <Input
+                        id={`${idPrefix}-token`}
                         type="password"
                         value={draft.authToken}
                         onChange={(event) => updateDraft(config.provider, { authToken: event.target.value })}
                         placeholder={draft.hasAuthToken ? "Saved — enter a new token to replace" : config.hints.authToken}
                       />
-                    </Field>
+                    </SettingsField>
                   ) : null}
                   {config.fields.includes("channel") ? (
-                    <Field label="Channel / chat ID">
+                    <SettingsField label="Channel / chat ID" htmlFor={`${idPrefix}-channel`}>
                       <Input
+                        id={`${idPrefix}-channel`}
                         value={draft.channel}
                         onChange={(event) => updateDraft(config.provider, { channel: event.target.value })}
                         placeholder={config.hints.channel}
                       />
-                    </Field>
+                    </SettingsField>
                   ) : null}
                   {config.fields.includes("priority") ? (
-                    <Field label="Priority">
-                      <Input
-                        type="number"
-                        min="0"
-                        max="10"
+                    <SettingsField label="Priority" htmlFor={`${idPrefix}-priority`}>
+                      <Select
+                        id={`${idPrefix}-priority`}
                         value={draft.priority}
                         onChange={(event) => updateDraft(config.provider, { priority: event.target.value })}
-                      />
-                    </Field>
+                      >
+                        {Array.from({ length: 11 }, (_, index) => (
+                          <option key={index} value={String(index)}>
+                            {index}
+                          </option>
+                        ))}
+                      </Select>
+                    </SettingsField>
                   ) : null}
                   <FieldError message={errors[config.provider]} />
-                </div>
-                <div className="flex flex-wrap gap-2 p-5">
-                  <Button variant="secondary" loading={saving === config.provider} onClick={() => save(config.provider)}>
-                    Save
-                  </Button>
-                  <Button
-                    variant="outline"
-                    loading={testing === config.provider || (saving === config.provider && !draft.id)}
-                    onClick={() => test(config.provider)}
-                  >
-                    Send Test Notification
-                  </Button>
-                </div>
-              </Card>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className="min-h-11"
+                      variant="secondary"
+                      loading={saving === config.provider}
+                      onClick={() => save(config.provider)}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      className="min-h-11"
+                      variant="outline"
+                      loading={testing === config.provider || (saving === config.provider && !draft.id)}
+                      onClick={() => test(config.provider)}
+                    >
+                      Send test
+                    </Button>
+                  </div>
+                </SettingsStack>
+              </SettingsGroup>
             );
           })}
         </div>
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">System status</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card className="divide-y divide-white/[0.06] p-0">
-            <div className="p-5">
-            <h3 className="font-medium text-zinc-50">eBay API</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Resolved from the Settings form first, then <code className="text-zinc-300">.env</code>.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
+      <SettingsSection title="System status">
+        <SettingsGroup
+          footer={
+            <>
+              Cloud uses <code className="text-zinc-300">/api/cron/poll</code>. Self-hosted uses{" "}
+              <code className="text-zinc-300">npm run worker</code> ({status?.poller.defaultCron ?? "*/5 * * * *"}). Set{" "}
+              <code className="text-zinc-300">POLLER_MODE=serverless</code> or <code className="text-zinc-300">worker</code>{" "}
+              to pin the indicator.
+            </>
+          }
+        >
+          <StatusRow
+            title="eBay API"
+            detail={`${status?.ebay.environment ?? "—"} · ${status?.ebay.marketplaceId ?? "—"}`}
+            blurb="Resolved from the settings form first, then .env."
+            badge={
               <Badge tone={status?.ebay.mockMode ? "warning" : status?.ebay.configured ? "success" : "danger"}>
                 {status?.ebay.mockMode
                   ? "Mock catalog"
@@ -321,49 +369,31 @@ export function SettingsView() {
                     ? "Configured"
                     : "Missing credentials"}
               </Badge>
-              <Badge tone={status?.ebay.appIdConfigured ? "success" : "warning"}>EBAY_APP_ID</Badge>
-              <Badge tone={status?.ebay.certIdConfigured ? "success" : "warning"}>EBAY_CERT_ID</Badge>
-            </div>
-            <dl className="mt-4 grid gap-2 text-sm text-zinc-400">
-              <div className="flex justify-between gap-4">
-                <dt>Environment</dt>
-                <dd className="text-zinc-200">{status?.ebay.environment ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>Marketplace</dt>
-                <dd className="text-zinc-200">{status?.ebay.marketplaceId ?? "—"}</dd>
-              </div>
-            </dl>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-medium text-zinc-50">AI provider</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Used by AI Smart Exclude on monitors. Local Ollama does not need an API key.
-            </p>
-            <div className="mt-4">
+            }
+          />
+          <StatusRow
+            title="AI provider"
+            detail={status?.ai?.model ?? "—"}
+            blurb="Used by AI Smart Exclude on monitors. Local Ollama does not need an API key."
+            badge={
               <Badge tone={status?.ai?.configured ? "success" : "warning"}>
                 {status?.ai?.configured ? "Configured" : "Not configured"}
               </Badge>
-            </div>
-            <dl className="mt-4 grid gap-2 text-sm text-zinc-400">
-              <div className="flex justify-between gap-4">
-                <dt>Model</dt>
-                <dd className="truncate text-zinc-200">{status?.ai?.model ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt>Base URL</dt>
-                <dd className="truncate text-zinc-200">{status?.ai?.baseUrl ?? "—"}</dd>
-              </div>
-            </dl>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-medium text-zinc-50">Gixen sniping</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Last-second bids are submitted to Gixen, not placed by BayRadar.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone={status?.gixen?.enabled && status.gixen.handshakeOk ? "success" : status?.gixen?.configured ? "warning" : "neutral"}>
+            }
+          />
+          <StatusRow
+            title="Gixen sniping"
+            blurb="Last-second bids are submitted to Gixen, not placed by BayRadar."
+            badge={
+              <Badge
+                tone={
+                  status?.gixen?.enabled && status.gixen.handshakeOk
+                    ? "success"
+                    : status?.gixen?.configured
+                      ? "warning"
+                      : "neutral"
+                }
+              >
                 {status?.gixen?.enabled && status.gixen.handshakeOk
                   ? status.gixen.mirrorActive
                     ? "Ready · Mirror"
@@ -372,31 +402,38 @@ export function SettingsView() {
                     ? "Handshake required"
                     : "Not configured"}
               </Badge>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-medium text-zinc-50">Poller mode</h3>
-            <p className="mt-1 text-sm text-zinc-400">Hybrid deployment: serverless cron and/or the self-hosted worker.</p>
-            <div className="mt-4">
-              <Badge tone="info">{pollerLabel(status?.poller.mode)}</Badge>
-            </div>
-            <p className="mt-4 text-sm text-zinc-400">
-              Cloud uses <code className="text-zinc-200">/api/cron/poll</code>. Self-hosted uses{" "}
-              <code className="text-zinc-200">npm run worker</code> ({status?.poller.defaultCron ?? "*/5 * * * *"}).
-              Set <code className="text-zinc-200">POLLER_MODE=serverless</code> or <code className="text-zinc-200">worker</code> to pin the indicator.
-            </p>
-          </Card>
-        </div>
-      </section>
+            }
+          />
+          <StatusRow
+            title="Poller mode"
+            blurb="Hybrid deployment: serverless cron and/or the self-hosted worker."
+            badge={<Badge tone="info">{pollerLabel(status?.poller.mode)}</Badge>}
+          />
+        </SettingsGroup>
+      </SettingsSection>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function StatusRow({
+  title,
+  blurb,
+  detail,
+  badge,
+}: {
+  title: string;
+  blurb: string;
+  detail?: string;
+  badge: ReactNode;
+}) {
   return (
-    <div className="grid gap-1.5">
-      <Label>{label}</Label>
-      {children}
+    <div className="flex min-h-11 items-start justify-between gap-3 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-[17px] leading-5 text-zinc-50">{title}</p>
+        <p className="mt-1 text-[13px] leading-4 text-zinc-400">{blurb}</p>
+        {detail ? <p className="mt-1 truncate text-[13px] leading-4 text-zinc-300">{detail}</p> : null}
+      </div>
+      <div className="shrink-0 pt-0.5">{badge}</div>
     </div>
   );
 }
@@ -442,7 +479,7 @@ function validateProvider(provider: NotificationProvider, draft: Draft): string 
 }
 
 function pollerLabel(mode?: SystemStatus["poller"]["mode"]) {
-  if (mode === "serverless") return "Serverless Cron";
-  if (mode === "worker") return "Standalone Worker";
-  return "Hybrid (Cron + Worker)";
+  if (mode === "serverless") return "Serverless cron";
+  if (mode === "worker") return "Standalone worker";
+  return "Hybrid (cron + worker)";
 }
