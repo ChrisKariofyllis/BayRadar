@@ -7,6 +7,7 @@ import { EbaySettingsCard } from "@/components/settings/EbaySettingsCard";
 import { ExperimentalSettingsCard } from "@/components/settings/ExperimentalSettingsCard";
 import { GixenSettingsCard } from "@/components/settings/GixenSettingsCard";
 import {
+  CollapsibleSettingsSection,
   SettingsField,
   SettingsGroup,
   SettingsSection,
@@ -90,6 +91,8 @@ const emptyDraft = (): Draft => ({
   hasAuthToken: false,
 });
 
+type SettingsPanelId = "ebay" | "gixen" | "ai" | "experimental" | "notifications";
+
 export function SettingsView() {
   const { push } = useToast();
   const [drafts, setDrafts] = useState<Record<NotificationProvider, Draft>>({
@@ -103,6 +106,7 @@ export function SettingsView() {
   const [saving, setSaving] = useState<NotificationProvider | null>(null);
   const [testing, setTesting] = useState<NotificationProvider | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [openPanel, setOpenPanel] = useState<SettingsPanelId | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -230,33 +234,123 @@ export function SettingsView() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div className="px-1">
         <h1 className="text-[28px] font-semibold tracking-tight text-zinc-50">Settings</h1>
         <p className="mt-1 text-[15px] text-zinc-400">
-          eBay credentials, Gixen sniping, AI exclusions, experimental valuation, notification channels, and system
-          status.
+          At-a-glance health, then expand a section to configure credentials and channels.
         </p>
       </div>
 
-      <SettingsSection title="eBay integration">
+      <SettingsSection title="System status">
+        <SettingsGroup
+          footer={
+            <>
+              Cloud uses <code className="text-zinc-300">/api/cron/poll</code>. Self-hosted uses{" "}
+              <code className="text-zinc-300">npm run worker</code> ({status?.poller.defaultCron ?? "*/5 * * * *"}). Set{" "}
+              <code className="text-zinc-300">POLLER_MODE=serverless</code> or <code className="text-zinc-300">worker</code>{" "}
+              to pin the indicator.
+            </>
+          }
+        >
+          <StatusRow
+            title="eBay API"
+            detail={`${status?.ebay.environment ?? "—"} · ${status?.ebay.marketplaceId ?? "—"}`}
+            blurb="Resolved from the settings form first, then .env."
+            badge={
+              <Badge tone={status?.ebay.mockMode ? "warning" : status?.ebay.configured ? "success" : "danger"}>
+                {status?.ebay.mockMode
+                  ? "Mock catalog"
+                  : status?.ebay.configured
+                    ? "Configured"
+                    : "Missing credentials"}
+              </Badge>
+            }
+          />
+          <StatusRow
+            title="AI provider"
+            detail={status?.ai?.model ?? "—"}
+            blurb="Used by AI Smart Exclude on monitors. Local Ollama does not need an API key."
+            badge={
+              <Badge tone={status?.ai?.configured ? "success" : "warning"}>
+                {status?.ai?.configured ? "Configured" : "Not configured"}
+              </Badge>
+            }
+          />
+          <StatusRow
+            title="Gixen sniping"
+            blurb="Last-second bids are submitted to Gixen, not placed by BayRadar."
+            badge={
+              <Badge
+                tone={
+                  status?.gixen?.enabled && status.gixen.handshakeOk
+                    ? "success"
+                    : status?.gixen?.configured
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {status?.gixen?.enabled && status.gixen.handshakeOk
+                  ? status.gixen.mirrorActive
+                    ? "Ready · Mirror"
+                    : "Ready"
+                  : status?.gixen?.configured
+                    ? "Handshake required"
+                    : "Not configured"}
+              </Badge>
+            }
+          />
+          <StatusRow
+            title="Poller mode"
+            blurb="Hybrid deployment: serverless cron and/or the self-hosted worker."
+            badge={<Badge tone="info">{pollerLabel(status?.poller.mode)}</Badge>}
+          />
+        </SettingsGroup>
+      </SettingsSection>
+
+      <CollapsibleSettingsSection
+        title="eBay integration"
+        subtitle="API credentials, marketplace, and mock catalog"
+        open={openPanel === "ebay"}
+        onOpenChange={(open) => setOpenPanel(open ? "ebay" : null)}
+      >
         <EbaySettingsCard />
-      </SettingsSection>
+      </CollapsibleSettingsSection>
 
-      <SettingsSection title="Sniping / Gixen">
+      <CollapsibleSettingsSection
+        title="Sniping / Gixen"
+        subtitle="Account handshake for last-second bids"
+        open={openPanel === "gixen"}
+        onOpenChange={(open) => setOpenPanel(open ? "gixen" : null)}
+      >
         <GixenSettingsCard />
-      </SettingsSection>
+      </CollapsibleSettingsSection>
 
-      <SettingsSection title="AI configuration">
+      <CollapsibleSettingsSection
+        title="AI configuration"
+        subtitle="Provider, model, and rate-limit fallback"
+        open={openPanel === "ai"}
+        onOpenChange={(open) => setOpenPanel(open ? "ai" : null)}
+      >
         <AiSettingsCard />
-      </SettingsSection>
+      </CollapsibleSettingsSection>
 
-      <SettingsSection title="Experimental">
+      <CollapsibleSettingsSection
+        title="Experimental"
+        subtitle="Price estimator and arbitrage detector"
+        open={openPanel === "experimental"}
+        onOpenChange={(open) => setOpenPanel(open ? "experimental" : null)}
+      >
         <ExperimentalSettingsCard />
-      </SettingsSection>
+      </CollapsibleSettingsSection>
 
-      <SettingsSection title="Notification channels">
-        <div className="space-y-6">
+      <CollapsibleSettingsSection
+        title="Notification channels"
+        subtitle="Ntfy, Telegram, Discord, and Gotify"
+        open={openPanel === "notifications"}
+        onOpenChange={(open) => setOpenPanel(open ? "notifications" : null)}
+      >
+        <div className="space-y-4">
           {PROVIDERS.map((config) => {
             const draft = drafts[config.provider];
             const idPrefix = config.provider.toLowerCase();
@@ -344,73 +438,7 @@ export function SettingsView() {
             );
           })}
         </div>
-      </SettingsSection>
-
-      <SettingsSection title="System status">
-        <SettingsGroup
-          footer={
-            <>
-              Cloud uses <code className="text-zinc-300">/api/cron/poll</code>. Self-hosted uses{" "}
-              <code className="text-zinc-300">npm run worker</code> ({status?.poller.defaultCron ?? "*/5 * * * *"}). Set{" "}
-              <code className="text-zinc-300">POLLER_MODE=serverless</code> or <code className="text-zinc-300">worker</code>{" "}
-              to pin the indicator.
-            </>
-          }
-        >
-          <StatusRow
-            title="eBay API"
-            detail={`${status?.ebay.environment ?? "—"} · ${status?.ebay.marketplaceId ?? "—"}`}
-            blurb="Resolved from the settings form first, then .env."
-            badge={
-              <Badge tone={status?.ebay.mockMode ? "warning" : status?.ebay.configured ? "success" : "danger"}>
-                {status?.ebay.mockMode
-                  ? "Mock catalog"
-                  : status?.ebay.configured
-                    ? "Configured"
-                    : "Missing credentials"}
-              </Badge>
-            }
-          />
-          <StatusRow
-            title="AI provider"
-            detail={status?.ai?.model ?? "—"}
-            blurb="Used by AI Smart Exclude on monitors. Local Ollama does not need an API key."
-            badge={
-              <Badge tone={status?.ai?.configured ? "success" : "warning"}>
-                {status?.ai?.configured ? "Configured" : "Not configured"}
-              </Badge>
-            }
-          />
-          <StatusRow
-            title="Gixen sniping"
-            blurb="Last-second bids are submitted to Gixen, not placed by BayRadar."
-            badge={
-              <Badge
-                tone={
-                  status?.gixen?.enabled && status.gixen.handshakeOk
-                    ? "success"
-                    : status?.gixen?.configured
-                      ? "warning"
-                      : "neutral"
-                }
-              >
-                {status?.gixen?.enabled && status.gixen.handshakeOk
-                  ? status.gixen.mirrorActive
-                    ? "Ready · Mirror"
-                    : "Ready"
-                  : status?.gixen?.configured
-                    ? "Handshake required"
-                    : "Not configured"}
-              </Badge>
-            }
-          />
-          <StatusRow
-            title="Poller mode"
-            blurb="Hybrid deployment: serverless cron and/or the self-hosted worker."
-            badge={<Badge tone="info">{pollerLabel(status?.poller.mode)}</Badge>}
-          />
-        </SettingsGroup>
-      </SettingsSection>
+      </CollapsibleSettingsSection>
     </div>
   );
 }
