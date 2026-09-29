@@ -20,14 +20,16 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 disabled:opacity-50",
-        checked ? "bg-emerald-500" : "bg-zinc-700",
+        "relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200",
+        "before:absolute before:-inset-2 before:content-['']",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 disabled:opacity-50",
+        checked ? "bg-emerald-500" : "bg-zinc-600",
       )}
     >
       <span
         className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.34,1.3,0.64,1)]",
-          checked ? "translate-x-6" : "translate-x-1",
+          "inline-block h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-out",
+          checked ? "translate-x-[22px]" : "translate-x-[2px]",
         )}
       />
     </button>
