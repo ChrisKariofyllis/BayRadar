@@ -57,7 +57,9 @@ export function DealCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={listing.imageUrl}
-            alt=""
+            alt={listing.title || "eBay item listing"}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
           />
         ) : (
@@ -132,7 +134,13 @@ export function DealCard({
         </div>
         {canArm ? (
           <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => onOpen(listing, "snipe")}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-[36px] sm:h-8"
+              onClick={() => onOpen(listing, "snipe")}
+            >
               <Crosshair className="h-3.5 w-3.5" />
               {snipe?.kind === "armed" ? "Update Snipe" : "Set Snipe"}
             </Button>

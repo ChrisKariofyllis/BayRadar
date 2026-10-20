@@ -1,6 +1,6 @@
 services:
   bayradar:
-    image: bayradar:1.4.4
+    image: bayradar:1.4.5
     pull_policy: never
     container_name: bayradar
     restart: unless-stopped

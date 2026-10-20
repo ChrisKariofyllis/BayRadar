@@ -114,7 +114,7 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={labelledBy}
         className={cn(
-          "absolute inset-x-0 bottom-0 flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-white/[0.08] bg-[#18181b] shadow-2xl ring-1 ring-white/10",
+          "absolute inset-x-0 bottom-0 flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-white/[0.08] bg-card shadow-2xl ring-1 ring-white/10",
           "md:relative md:inset-auto md:max-h-[90vh] md:w-full md:max-w-xl md:rounded-2xl",
           draggingNow ? "" : "transition-all duration-300 ease-out",
           entered

@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-20T11:38:00.000Z",
+  "title": "Design System: BayRadar",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Signal Amber",
+        "canonical": "oklch(78.5% 0.16 75)",
+        "tonalRamp": [
+          "#451a03",
+          "#78350f",
+          "#92400e",
+          "#b45309",
+          "#d97706",
+          "#f59e0b",
+          "#fbbf24",
+          "#fde68a"
+        ]
+      },
+      "ai-verified": {
+        "role": "secondary",
+        "displayName": "AI Violet",
+        "canonical": "oklch(68% 0.22 305)",
+        "tonalRamp": [
+          "#3b0764",
+          "#581c87",
+          "#7e22ce",
+          "#9333ea",
+          "#a855f7",
+          "#c084fc",
+          "#d8b4fe",
+          "#f3e8ff"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Tactical Emerald",
+        "canonical": "oklch(70% 0.17 155)",
+        "tonalRamp": [
+          "#022c22",
+          "#064e3b",
+          "#065f46",
+          "#047857",
+          "#059669",
+          "#10b981",
+          "#34d399",
+          "#a7f3d0"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Obsidian Void",
+        "canonical": "oklch(12% 0.01 260)",
+        "tonalRamp": [
+          "#09090b",
+          "#18181b",
+          "#27272a",
+          "#3f3f46",
+          "#52525b",
+          "#71717a",
+          "#a1a1aa",
+          "#f4f4f5"
+        ]
+      },
+      "card-elevated": {
+        "role": "neutral",
+        "displayName": "Frosted Slate",
+        "canonical": "rgba(255, 255, 255, 0.03)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.01)",
+          "rgba(255, 255, 255, 0.03)",
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.10)",
+          "rgba(255, 255, 255, 0.15)",
+          "rgba(255, 255, 255, 0.25)",
+          "rgba(255, 255, 255, 0.50)",
+          "rgba(255, 255, 255, 0.85)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display Sans",
+        "purpose": "Page titles and primary section hero headers."
+      },
+      "headline": {
+        "displayName": "Headline Sans",
+        "purpose": "Modal headers and card group headers."
+      },
+      "title": {
+        "displayName": "Title Sans",
+        "purpose": "Deal listing titles and monitor query identifiers."
+      },
+      "body": {
+        "displayName": "Body Sans",
+        "purpose": "Descriptions, field inputs, form labels, and table contents."
+      },
+      "label": {
+        "displayName": "Telemetry Mono",
+        "purpose": "Prices, countdowns, timestamps, margins, and status chips."
+      }
+    },
+    "shadows": [
+      {
+        "name": "radar-glow",
+        "value": "0 0 24px rgba(245, 177, 74, 0.25)",
+        "purpose": "Ambient radar sweep and active monitor beacon indicator."
+      },
+      {
+        "name": "glass-sm",
+        "value": "0 1px 2px 0 rgba(0, 0, 0, 0.4)",
+        "purpose": "Subtle grounding beneath translucent card surfaces."
+      },
+      {
+        "name": "modal-depth",
+        "value": "0 25px 50px -12px rgba(0, 0, 0, 0.85)",
+        "purpose": "High elevation for centered dialogs and mobile bottom sheets."
+      }
+    ],
+    "motion": [
+      {
+        "name": "radar-sweep",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "2.4s pulse cycle for active background radar scans."
+      },
+      {
+        "name": "tactical-hover",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Instant 150ms state response for buttons and card focus."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Beacon Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Tactile amber gradient trigger for primary actions (Scan, New Monitor, Arm Snipe).",
+      "html": "<button class=\"ds-btn-primary\"><svg class=\"ds-btn-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"12\"/><line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"/></svg>Trigger Scan</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; height: 36px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #09090b; background: linear-gradient(to bottom, #fcd34d, #f59e0b); border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.3); outline: none; cursor: pointer; transition: filter 0.15s ease, transform 0.1s ease; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-icon { width: 16px; height: 16px; }"
+    },
+    {
+      "name": "Secondary Translucent Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Subtle glass button for navigation, auxiliary options, and secondary controls.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; height: 36px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #f4f4f5; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; transition: background 0.15s ease; } .ds-btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }"
+    },
+    {
+      "name": "Tactical Field Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "High-contrast dark input with amber focus ring and crisp typography.",
+      "html": "<input class=\"ds-input-field\" type=\"text\" placeholder=\"Search query (e.g. Sony A7 IV)...\" />",
+      "css": ".ds-input-field { display: block; width: 100%; height: 44px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.4); padding: 0 12px; font-size: 14px; color: #f4f4f5; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input-field::placeholder { color: #71717a; } .ds-input-field:focus { border-color: rgba(245, 177, 74, 0.5); box-shadow: 0 0 0 2px rgba(245, 177, 74, 0.2); }"
+    },
+    {
+      "name": "Obsidian Glass Card",
+      "kind": "card",
+      "refersTo": "card-container",
+      "description": "Translucent layered surface for deals, monitors, and stats cards.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><span class=\"ds-badge-format\">AUCTION</span><span class=\"ds-badge-time\">2h 45m</span></div><div class=\"ds-card-title\">Sony Alpha A7 IV (Body Only)</div><div class=\"ds-card-meta\"><span class=\"ds-card-price\">€1,350.00</span><span class=\"ds-card-margin\">-22%</span></div></div>",
+      "css": ".ds-card { border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 16px; color: #f4f4f5; box-shadow: 0 1px 3px rgba(0,0,0,0.3); } .ds-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; } .ds-badge-format { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #e4e4e7; } .ds-badge-time { font-family: ui-monospace, monospace; font-size: 11px; color: #a1a1aa; } .ds-card-title { font-size: 15px; font-weight: 600; line-height: 1.4; color: #fafafa; margin-bottom: 12px; } .ds-card-meta { display: flex; justify-content: space-between; align-items: baseline; } .ds-card-price { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 700; color: #f5b14a; } .ds-card-margin { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 600; color: #34d399; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.2); padding: 2px 6px; border-radius: 6px; }"
+    },
+    {
+      "name": "AI Verified Chip",
+      "kind": "chip",
+      "refersTo": "badge-ai",
+      "description": "Tactical pill badge confirming AI Title Gatekeeper authenticity validation.",
+      "html": "<span class=\"ds-chip-ai\"><svg class=\"ds-chip-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z\"/></svg>AI Verified</span>",
+      "css": ".ds-chip-ai { display: inline-flex; align-items: center; gap: 5px; height: 24px; border-radius: 9999px; padding: 0 10px; font-size: 11px; font-weight: 500; color: #e9d5ff; background: rgba(59, 7, 100, 0.5); border: 1px solid rgba(192, 132, 252, 0.35); box-shadow: 0 1px 4px rgba(59, 7, 100, 0.4); backdrop-filter: blur(8px); } .ds-chip-icon { width: 12px; height: 12px; color: #d8b4fe; }"
+    },
+    {
+      "name": "Live Radar Pulse Beacon",
+      "kind": "custom",
+      "refersTo": "brand-radar-glyph",
+      "description": "Signature animated radar disc indicating scanning activity and live connectivity.",
+      "html": "<div class=\"ds-radar-wrap\"><div class=\"ds-radar-beacon\"><div class=\"ds-radar-ring\"></div><svg class=\"ds-radar-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m12 20 9-11h-6V2l-9 11h6z\"/></svg></div><div class=\"ds-radar-text\">BayRadar <span class=\"ds-live-dot\"></span></div></div>",
+      "css": ".ds-radar-wrap { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; color: #fafafa; } .ds-radar-beacon { position: relative; width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(to bottom, #fcd34d, #f59e0b); display: flex; align-items: center; justify-content: center; color: #09090b; } .ds-radar-ring { position: absolute; inset: 0; border-radius: 10px; border: 1.5px solid rgba(251, 191, 36, 0.6); animation: ds-pulse 2.4s ease-out infinite; } .ds-radar-icon { width: 16px; height: 16px; } .ds-radar-text { display: flex; align-items: center; gap: 6px; } .ds-live-dot { width: 8px; height: 8px; border-radius: 9999px; background: #10b981; box-shadow: 0 0 8px #10b981; } @keyframes ds-pulse { 0% { transform: scale(0.9); opacity: 0.8; } 100% { transform: scale(1.6); opacity: 0; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Tactical Radar Deck",
+    "overview": "BayRadar embodies the precision and calm authority of a modern avionics radar terminal. Built specifically for homelab operators, bargain hunters, and hardware enthusiasts, the interface presents high-density market surveillance data on a backdrop of deep obsidian glass. Every surface feels intentionally calibrated: atmospheric radial glow beacons indicate background scanning health, hairline translucent borders establish structure without visual bulk, and subtle backdrop blurs allow ambient depth to filter through data cards.\n\nThe aesthetic deliberately rejects generic 'SaaS slop'—there are no pastel purple primary CTAs, no floating bright white cards, no cartoonish illustrations, and no decorative animations that delay user interaction. Visual hierarchy is sharp and unambiguous: active scans and high-conviction deals glow with warm signal amber, verified listings carry concise tactical telemetry tags, and secondary controls remain quiet in low-contrast translucent zinc until engaged.",
+    "keyCharacteristics": [
+      "Layered Obsidian Glass: Deep #09090b canvas with frosted backdrop-blur-md surfaces and subtle white/[0.08] hairline borders.",
+      "Signal-Driven Hierarchy: Signal Amber serves as an operational beacon, reserved exclusively for action triggers, pulse animations, and verified deals.",
+      "Information-Dense Telemetry: Monospace timestamps, countdowns, currency amounts, and margin comparisons designed for rapid scanning.",
+      "Tactile Utility: Compact, responsive controls with crisp hover transitions and instant mobile bottom-sheet inspections."
+    ],
+    "rules": [
+      {
+        "name": "The Beacon Rule",
+        "body": "Signal Amber is reserved strictly for primary execution triggers (New Monitor, Trigger Scan, Arm Snipe) and live radar status pulses. It is never used as a generic background tint, table header wash, or decorative filler. Its rarity is what commands instant attention.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ghost Border Fallback",
+        "body": "Surfaces achieve separation through subtle alpha borders (rgba(255, 255, 255, 0.08)) and tonal glass shifts rather than opaque contrasting outlines or drop-shadow halos.",
+        "section": "colors"
+      },
+      {
+        "name": "The Numeric Precision Rule",
+        "body": "All currency amounts, countdown timers, margins, and system version tags must render in Geist Mono (font-mono) to ensure tabular alignment and immediate numerical legibility.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline Boundary Rule",
+        "body": "All elevated containers must pair a 1px outer hairline border (border-white/[0.08]) with an ultra-subtle inset ring (ring-1 ring-white/[0.04]) to define clean glass edges against dark imagery.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use font-mono for all prices, countdown timers, margins, and timestamps.",
+      "Do reserve the Signal Amber gradient strictly for primary execution triggers and radar beacons.",
+      "Do maintain translucent glass containers (bg-white/[0.03] backdrop-blur-md) with border-white/[0.08] hairlines.",
+      "Do provide mobile bottom sheets alongside desktop dialog modals for complex inspections.",
+      "Do show active status indications with pulsing dot badges (e.g. emerald live indicator)."
+    ],
+    "donts": [
+      "Don't use generic SaaS purple buttons or bright gradients as primary action triggers.",
+      "Don't introduce solid pure-white card backgrounds or heavy opaque drop shadows.",
+      "Don't use decorative animations or slow transition delays that obstruct immediate data intake.",
+      "Don't mix multiple conflicting accent colors on the same data card; keep metadata badges focused.",
+      "Don't omit the dark mode color scheme or create low-contrast gray-on-dark text below accessibility minimums."
+    ]
+  }
+}

@@ -253,6 +253,7 @@ export function MonitorFormModal({
     >
       <form className="grid gap-3" onSubmit={handleSubmit}>
         <Field
+          htmlFor="monitor-name"
           label="Monitor name"
           error={errors.name || (syncQueryWithName ? errors.query : undefined)}
           labelRight={
@@ -268,15 +269,17 @@ export function MonitorFormModal({
           }
         >
           <Input
+            id="monitor-name"
             value={values.name}
             onChange={(event) => update("name", event.target.value)}
-            placeholder='PS5 Digital under 350€'
+            placeholder="PS5 Digital under 350€"
           />
         </Field>
         {!syncQueryWithName ? (
           <div className="grid motion-safe:animate-[fadeSlide_180ms_ease-out]">
-            <Field label="Search query" error={errors.query}>
+            <Field htmlFor="monitor-query" label="Search query" error={errors.query}>
               <Input
+                id="monitor-query"
                 value={values.query}
                 onChange={(event) => update("query", event.target.value)}
                 placeholder="PS5 Digital Edition"
@@ -285,8 +288,9 @@ export function MonitorFormModal({
           </div>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Min Price (€)" error={errors.minPrice}>
+          <Field htmlFor="monitor-min-price" label="Min Price (€)" error={errors.minPrice}>
             <Input
+              id="monitor-min-price"
               type="number"
               min="0.01"
               step="0.01"
@@ -295,8 +299,9 @@ export function MonitorFormModal({
               placeholder="e.g. 150"
             />
           </Field>
-          <Field label="Max Price (€)" error={errors.maxPrice}>
+          <Field htmlFor="monitor-max-price" label="Max Price (€)" error={errors.maxPrice}>
             <Input
+              id="monitor-max-price"
               type="number"
               min="0.01"
               step="0.01"
@@ -306,9 +311,10 @@ export function MonitorFormModal({
             />
           </Field>
         </div>
-        <Field label="Market Value / Baseline (€)" error={errors.targetMarketValue}>
+        <Field htmlFor="monitor-target-value" label="Market Value / Baseline (€)" error={errors.targetMarketValue}>
           <div className="flex items-center gap-2">
             <Input
+              id="monitor-target-value"
               type="number"
               min="0.01"
               step="0.01"
@@ -329,7 +335,7 @@ export function MonitorFormModal({
           </div>
           {idealoHint ? <p className="text-xs leading-relaxed text-zinc-400">{idealoHint}</p> : null}
         </Field>
-        <Field label="Negative keywords" error={errors.negativeKeywords}>
+        <Field htmlFor="monitor-negative-keywords" label="Negative keywords" error={errors.negativeKeywords}>
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -358,6 +364,7 @@ export function MonitorFormModal({
             </p>
           ) : null}
           <Input
+            id="monitor-negative-keywords"
             value={values.negativeKeywords}
             onChange={(event) => update("negativeKeywords", event.target.value)}
             placeholder="ovp, defekt, box only"
@@ -406,23 +413,25 @@ export function MonitorFormModal({
             ⚙️ Advanced options
           </summary>
           <div className="grid gap-3 border-t border-white/[0.06] px-3 py-3">
-            <Field label="Category ID (optional)">
+            <Field htmlFor="monitor-category-id" label="Category ID (optional)">
               <Input
+                id="monitor-category-id"
                 value={values.categoryId}
                 onChange={(event) => update("categoryId", event.target.value)}
                 placeholder="139973"
               />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Buying type">
-                <Select value={values.buyingType} onChange={(event) => update("buyingType", event.target.value as BuyingType)}>
+              <Field htmlFor="monitor-buying-type" label="Buying type">
+                <Select id="monitor-buying-type" value={values.buyingType} onChange={(event) => update("buyingType", event.target.value as BuyingType)}>
                   <option value="ALL">ALL</option>
                   <option value="AUCTION">AUCTION</option>
                   <option value="FIXED_PRICE">FIXED_PRICE</option>
                 </Select>
               </Field>
-              <Field label="Max remaining auction hours" error={errors.maxRemainingHours}>
+              <Field htmlFor="monitor-max-hours" label="Max remaining auction hours" error={errors.maxRemainingHours}>
                 <Input
+                  id="monitor-max-hours"
                   type="number"
                   min="1"
                   step="1"
@@ -432,8 +441,8 @@ export function MonitorFormModal({
                 />
               </Field>
             </div>
-            <Field label="Polling schedule">
-              <Select value={values.cronSchedule} onChange={(event) => update("cronSchedule", event.target.value)}>
+            <Field htmlFor="monitor-cron-schedule" label="Polling schedule">
+              <Select id="monitor-cron-schedule" value={values.cronSchedule} onChange={(event) => update("cronSchedule", event.target.value)}>
                 {CRON_PRESETS.map((preset) => (
                   <option key={preset.value} value={preset.value}>
                     {preset.label}
@@ -460,11 +469,13 @@ export function MonitorFormModal({
 }
 
 function Field({
+  htmlFor,
   label,
   error,
   children,
   labelRight,
 }: {
+  htmlFor?: string;
   label: string;
   error?: string;
   children: ReactNode;
@@ -473,7 +484,7 @@ function Field({
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label>{label}</Label>
+        <Label htmlFor={htmlFor}>{label}</Label>
         {labelRight}
       </div>
       {children}

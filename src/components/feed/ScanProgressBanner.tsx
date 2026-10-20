@@ -77,8 +77,9 @@ export function ScanProgressBanner() {
 
   return (
     <>
-      <div className="mx-auto w-full max-w-7xl px-6 pt-4">
+      <div className="mx-auto w-full max-w-7xl px-6 pt-4" aria-live="polite">
         <div
+          role="status"
           className={
             showQuota
               ? "overflow-hidden rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 shadow-lg ring-1 ring-amber-400/15 backdrop-blur-xl"

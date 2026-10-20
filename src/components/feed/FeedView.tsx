@@ -46,6 +46,7 @@ export function FeedView() {
   }, [query]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const params = new URLSearchParams();
     if (monitorId) params.set("monitorId", monitorId);
     if (format) params.set("format", format);
@@ -54,24 +55,34 @@ export function FeedView() {
     if (view === "snipes") params.set("snipes", "active");
     if (view === "ended") params.set("snipes", "ended");
     setLoading(true);
-    api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+    api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`, {
+      signal: controller.signal,
+    })
       .then((data) => {
         setListings(data.listings);
         if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
         if (typeof data.endedSnipeCount === "number") setEndedCount(data.endedSnipeCount);
       })
       .catch((error) => {
+        if (controller.signal.aborted) return;
         push({
           tone: "error",
           title: "Could not load deals",
           description: error instanceof ApiError ? error.message : undefined,
         });
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
   }, [monitorId, format, sort, debouncedQuery, view, push]);
 
   useEffect(() => {
     if (scan.status === "idle") return;
+    const controller = new AbortController();
     const params = new URLSearchParams();
     if (monitorId) params.set("monitorId", monitorId);
     if (format) params.set("format", format);
@@ -81,7 +92,9 @@ export function FeedView() {
     if (view === "ended") params.set("snipes", "ended");
 
     const refresh = () => {
-      api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`)
+      api<{ listings: SeenListing[]; activeSnipeCount?: number; endedSnipeCount?: number }>(`/api/feed?${params.toString()}`, {
+        signal: controller.signal,
+      })
         .then((data) => {
           setListings(data.listings);
           if (typeof data.activeSnipeCount === "number") setSnipeCount(data.activeSnipeCount);
@@ -93,7 +106,10 @@ export function FeedView() {
     refresh();
     if (!isScanRunning(scan)) return;
     const interval = window.setInterval(refresh, 2500);
-    return () => window.clearInterval(interval);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+    };
   }, [debouncedQuery, format, monitorId, scan.status, scan.finishedAt, sort, view]);
 
   const visible = useMemo(() => {

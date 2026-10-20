@@ -206,7 +206,7 @@ export function DealQuickView({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100"
+              className="rounded-xl p-2.5 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 sm:p-2"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -218,7 +218,13 @@ export function DealQuickView({
               {active.imageUrl ? (
                 // eBay CDN URLs vary; native img avoids remotePatterns config.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={active.imageUrl} alt="" className="max-h-64 w-full object-contain md:max-h-80" />
+                <img
+                  src={active.imageUrl}
+                  alt={active.title || "eBay item preview"}
+                  loading="lazy"
+                  decoding="async"
+                  className="max-h-64 w-full object-contain md:max-h-80"
+                />
               ) : (
                 <div className="flex h-48 items-center justify-center text-zinc-600">
                   <ImageOff className="h-10 w-10" />
@@ -280,7 +286,7 @@ export function DealQuickView({
             </div>
           </div>
 
-          <div className="sticky bottom-0 space-y-3 border-t border-white/[0.08] bg-[#18181b] px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="sticky bottom-0 space-y-3 border-t border-white/[0.08] bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {auction ? (
               <>
                 {snipeState && snipeState.kind !== "armed" ? <SnipeOutcomeBanner listing={active} /> : null}

@@ -31,7 +31,7 @@ export function ScanButton({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <Button onClick={() => void triggerScan()} loading={loading} variant="secondary" size="sm">
+    <Button onClick={() => void triggerScan()} loading={loading} variant="primary" size="sm">
       <Radar className="h-4 w-4" />
       <span className="hidden sm:inline">{compact ? "Trigger Scan" : "Trigger Scan"}</span>
     </Button>
