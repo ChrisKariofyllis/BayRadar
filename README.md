@@ -11,7 +11,9 @@
 Built by **[Chris Kariofyllis](https://github.com/ChrisKariofyllis)**.
 
 <p align="center">
-  <img src="docs/bayradar.png" alt="BayRadar dashboard with monitors, live scan, and dark Apple-style UI" width="920" />
+  <video src="docs/BayRadar.mp4" width="920" autoplay loop muted playsinline controls>
+    BayRadar dashboard with monitors, live scan, and dark Apple-style UI
+  </video>
 </p>
 
 ---
